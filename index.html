@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>万能！半角かっこ閉じ忘れチェッカー 🔍</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --border: #e2e8f0;
+      --text: #1e293b;
+      --text-sub: #64748b;
+      --danger: #ef4444;
+      --danger-bg: #fef2f2;
+      --success: #10b981;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      max-width: 960px;
+      margin: 40px auto;
+      padding: 0 20px 60px;
+      line-height: 1.6;
+    }
+    h1 {
+      text-align: center;
+      font-size: 1.8rem;
+      margin-bottom: 8px;
+    }
+    .subtitle {
+      text-align: center;
+      color: var(--text-sub);
+      margin-bottom: 24px;
+      font-size: 0.95rem;
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    }
+    textarea {
+      width: 100%;
+      height: 240px;
+      padding: 14px;
+      box-sizing: border-box;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.95rem;
+      outline: none;
+      resize: vertical;
+      transition: border-color 0.2s;
+    }
+    textarea:focus {
+      border-color: var(--primary);
+    }
+    .options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin: 14px 0;
+      font-size: 0.9rem;
+    }
+    .options label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .btn-group {
+      display: flex;
+      gap: 10px;
+    }
+    button {
+      flex: 1;
+      padding: 12px 20px;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #fff;
+      background-color: var(--primary);
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    button:hover {
+      background-color: var(--primary-hover);
+    }
+    button.clear-btn {
+      flex: 0 0 100px;
+      background-color: #94a3b8;
+    }
+    button.clear-btn:hover {
+      background-color: #64748b;
+    }
+    .count-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .count-card {
+      padding: 12px;
+      border-radius: 8px;
+      background: #f1f5f9;
+      text-align: center;
+      border: 1px solid transparent;
+    }
+    .count-card.error {
+      background: var(--danger-bg);
+      border-color: #fca5a5;
+      color: #b91c1c;
+      font-weight: 600;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: bold;
+      color: #fff;
+      margin-bottom: 6px;
+    }
+    .badge-error { background-color: var(--danger); }
+    .badge-info { background-color: #64748b; }
+    .error-item {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-left: 5px solid var(--danger);
+      border-radius: 6px;
+      padding: 12px 16px;
+      margin-bottom: 12px;
+    }
+    .code-preview {
+      background: #1e293b;
+      color: #f8fafc;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-family: ui-monospace, monospace;
+      font-size: 0.85rem;
+      overflow-x: auto;
+      margin-top: 6px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>🔍 半角かっこ閉じ忘れチェッカー ✨</h1>
+  <div class="subtitle">ソースコードやテキストの半角かっこ（ `()` `{}` `[]` `<>` ）の対応関係とズレを瞬時に診断します</div>
+
+  <div class="card">
+    <textarea id="inputText" placeholder="チェックしたいコードやテキストを貼り付けてね！"></textarea>
+    
+    <div class="options">
+      <label>
+        <input type="checkbox" id="ignoreCodeLiterals" checked>
+        文字列・コメントを除外（JS/TS/C/Java等のコード用）
+      </label>
+      <label>
+        <input type="checkbox" id="checkAngleBrackets">
+        山かっこ &lt;&gt; もチェックする（HTML/XMLやジェネリクス用）
+      </label>
+    </div>
+
+    <div class="btn-group">
+      <button onclick="runDiagnostic()">チェック実行 🚀</button>
+      <button class="clear-btn" onclick="clearAll()">クリア 🗑️</button>
+    </div>
+  </div>
+
+  <!-- 総数パネル -->
+  <div id="summaryCard" class="card" style="display:none;">
+    <h3 style="margin-top:0;">📊 かっこの総数バランス</h3>
+    <div id="countGrid" class="count-grid"></div>
+  </div>
+
+  <!-- 診断結果パネル -->
+  <div id="resultCard" class="card" style="display:none;">
+    <h3 style="margin-top:0;">📋 診断結果</h3>
+    <div id="resultOutput"></div>
+  </div>
+
+  <script>
+    // 汎用字句解析：文字列・コメント・正規表現をマスク
+    function maskCodeLiterals(source) {
+      const chars = source.split('');
+      const len = chars.length;
+      let i = 0, prev = '';
+
+      while (i < len) {
+        const c = chars[i], next = chars[i + 1];
+
+        // 1. 行コメント //
+        if (c === '/' && next === '/') {
+          while (i < len && chars[i] !== '\n') { chars[i] = ' '; i++; }
+          continue;
+        }
+        // 2. ブロックコメント /* */
+        if (c === '/' && next === '*') {
+          chars[i] = ' '; chars[i + 1] = ' '; i += 2;
+          while (i < len && !(chars[i] === '*' && chars[i + 1] === '/')) {
+            if (chars[i] !== '\n') chars[i] = ' ';
+            i++;
+          }
+          if (i < len) { chars[i] = ' '; chars[i + 1] = ' '; i += 2; }
+          continue;
+        }
+        // 3. 文字列 " または '
+        if (c === '"' || c === "'") {
+          const q = c; chars[i] = ' '; i++;
+          while (i < len && chars[i] !== q && chars[i] !== '\n') {
+            if (chars[i] === '\\') { chars[i] = ' '; i++; if (i < len && chars[i] !== '\n') chars[i] = ' '; }
+            else { chars[i] = ' '; }
+            i++;
+          }
+          if (i < len && chars[i] === q) { chars[i] = ' '; i++; }
+          prev = q; continue;
+        }
+        // 4. テンプレートリテラル `
+        if (c === '`') {
+          chars[i] = ' '; i++;
+          while (i < len && chars[i] !== '`') {
+            if (chars[i] === '\\') { chars[i] = ' '; i++; if (i < len && chars[i] !== '\n') chars[i] = ' '; }
+            else { if (chars[i] !== '\n') chars[i] = ' '; }
+            i++;
+          }
+          if (i < len && chars[i] === '`') { chars[i] = ' '; i++; }
+          prev = '`'; continue;
+        }
+        // 5. 正規表現リテラル /.../
+        if (c === '/' && /[=(:,;!&|?{\[\n]/.test(prev)) {
+          chars[i] = ' '; i++;
+          let inCharClass = false;
+          while (i < len && (chars[i] !== '/' || inCharClass) && chars[i] !== '\n') {
+            if (chars[i] === '\\') { chars[i] = ' '; i++; if (i < len && chars[i] !== '\n') chars[i] = ' '; }
+            else {
+              if (chars[i] === '[') inCharClass = true;
+              else if (chars[i] === ']') inCharClass = false;
+              chars[i] = ' ';
+            }
+            i++;
+          }
+          if (i < len && chars[i] === '/') {
+            chars[i] = ' '; i++;
+            while (i < len && /[a-z]/i.test(chars[i])) { chars[i] = ' '; i++; }
+          }
+          prev = '/'; continue;
+        }
+        if (!/\s/.test(c)) prev = c;
+        i++;
+      }
+      return chars.join('');
+    }
+
+    function runDiagnostic() {
+      const text = document.getElementById('inputText').value;
+      if (!text.trim()) {
+        alert('テキストを入力してね！💡');
+        return;
+      }
+
+      const ignoreLiterals = document.getElementById('ignoreCodeLiterals').checked;
+      const checkAngle = document.getElementById('checkAngleBrackets').checked;
+
+      // 対象とする半角かっこのペア
+      const pairMap = {
+        '(': ')',
+        '{': '}',
+        '[': ']'
+      };
+      if (checkAngle) {
+        pairMap['<'] = '>';
+      }
+
+      const opens = Object.keys(pairMap);
+      const closes = Object.values(pairMap);
+
+      // 解析用テキスト（マスクするかどうか）
+      const analyzedText = ignoreLiterals ? maskCodeLiterals(text) : text;
+      const originalLines = text.split('\n');
+      const analyzedLines = analyzedText.split('\n');
+
+      const counts = {};
+      opens.forEach(o => counts[o] = { open: 0, close: 0, pair: pairMap[o] });
+
+      const stack = [];
+      const errors = [];
+
+      analyzedLines.forEach((lineText, lIdx) => {
+        const lineNum = lIdx + 1;
+        for (let cIdx = 0; cIdx < lineText.length; cIdx++) {
+          const ch = lineText[cIdx];
+          const colNum = cIdx + 1;
+
+          if (opens.includes(ch)) {
+            counts[ch].open++;
+            stack.push({
+              ch,
+              lineNum,
+              colNum,
+              preview: originalLines[lIdx].trim()
+            });
+          } else if (closes.includes(ch)) {
+            const matchedOpen = Object.keys(pairMap).find(k => pairMap[k] === ch);
+            if (matchedOpen) counts[matchedOpen].close++;
+
+            if (stack.length === 0) {
+              errors.push({
+                type: 'unexpected_close',
+                lineNum,
+                colNum,
+                msg: `開かれていない閉じかっこ「${ch}」が現れました`,
+                preview: originalLines[lIdx].trim()
+              });
+            } else {
+              const top = stack.pop();
+              if (pairMap[top.ch] !== ch) {
+                errors.push({
+                  type: 'mismatch',
+                  lineNum,
+                  colNum,
+                  openLine: top.lineNum,
+                  openCol: top.colNum,
+                  expected: pairMap[top.ch],
+                  actual: ch,
+                  preview: originalLines[lIdx].trim()
+                });
+              }
+            }
+          }
+        }
+      });
+
+      // 1. 総数バランスの表示
+      const summaryCard = document.getElementById('summaryCard');
+      const countGrid = document.getElementById('countGrid');
+      summaryCard.style.display = 'block';
+      countGrid.innerHTML = '';
+
+      let hasCountError = false;
+      opens.forEach(o => {
+        const c = pairMap[o];
+        const diff = counts[o].open - counts[o].close;
+        const isBad = diff !== 0;
+        if (isBad) hasCountError = true;
+
+        const card = document.createElement('div');
+        card.className = `count-card ${isBad ? 'error' : ''}`;
+        
+        let status = '完全一致 ✨';
+        if (diff > 0) status = `閉じ (${c}) が ${diff} 個不足 ⚠️`;
+        if (diff < 0) status = `開き (${o}) が ${Math.abs(diff)} 個不足 ⚠️`;
+
+        card.innerHTML = `
+          <div style="font-size:1.1rem;"><strong>${escapeHtml(o)} ${escapeHtml(c)}</strong></div>
+          <div style="font-size:0.85rem; margin:4px 0;">開: ${counts[o].open} / 閉: ${counts[o].close}</div>
+          <div style="font-size:0.8rem;">${status}</div>
+        `;
+        countGrid.appendChild(card);
+      });
+
+      // 2. 診断結果の表示
+      const resultCard = document.getElementById('resultCard');
+      const resultOutput = document.getElementById('resultOutput');
+      resultCard.style.display = 'block';
+
+      if (errors.length === 0 && stack.length === 0 && !hasCountError) {
+        resultOutput.innerHTML = `
+          <div style="color: var(--success); font-weight: bold; font-size: 1.1rem;">
+            🎉 すべての半角かっこが綺麗に対応しています！問題ありません✨
+          </div>
+        `;
+        return;
+      }
+
+      let html = '';
+
+      // スタックに残っている未閉じかっこ
+      if (stack.length > 0) {
+        html += `<h4 style="color:var(--danger); margin-bottom:10px;">⚠️ 最後まで閉じられていない開きかっこ（${stack.length}件）</h4>`;
+        stack.forEach((item, index) => {
+          const isDeepest = index === stack.length - 1;
+          html += `
+            <div class="error-item">
+              <span class="badge ${isDeepest ? 'badge-error' : 'badge-info'}">
+                ${isDeepest ? '🚨 最も閉じ忘れが疑われる箇所' : '📌 開かれたままのブロック'}
+              </span>
+              <div><strong>${item.lineNum} 行目 ${item.colNum} 文字目</strong> の「<code>${escapeHtml(item.ch)}</code>」が閉じられていません</div>
+              <div class="code-preview">${escapeHtml(item.preview || '(空白行)')}</div>
+            </div>
+          `;
+        });
+      }
+
+      // 不整合・余剰な閉じかっこ
+      if (errors.length > 0) {
+        html += `<h4 style="color:var(--danger); margin: 20px 0 10px;">⚠️ かっこの食い違い・余分な閉じかっこ（${errors.length}件）</h4>`;
+        errors.slice(0, 15).forEach(err => {
+          let desc = '';
+          if (err.type === 'unexpected_close') {
+            desc = err.msg;
+          } else {
+            desc = `「${err.actual}」が来ていますが、本来は ${err.openLine}行目の開きかっこに対する「${err.expected}」が必要です`;
+          }
+          html += `
+            <div class="error-item">
+              <div>📍 <strong>${err.lineNum} 行目 ${err.colNum} 文字目</strong>: ${desc}</div>
+              <div class="code-preview">${escapeHtml(err.preview || '(空白行)')}</div>
+            </div>
+          `;
+        });
+        if (errors.length > 15) {
+          html += `<p style="color:var(--text-sub); font-size:0.85rem;">...他 ${errors.length - 15} 件のエラーがあります（最初のエラーを修正すると解消する場合があります）</p>`;
+        }
+      }
+
+      resultOutput.innerHTML = html;
+    }
+
+    function clearAll() {
+      document.getElementById('inputText').value = '';
+      document.getElementById('summaryCard').style.display = 'none';
+      document.getElementById('resultCard').style.display = 'none';
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+    }
+  </script>
+</body>
+</html>
