@@ -397,97 +397,161 @@
       showNotice(`💾 ${outName} を保存したよ！`);
     }
 
-    // 🧹【HTMLタグ・JS波かっこ 厳密インデント整列】
+    // 🧹【HTML ＆ JS/GAS 自動適応インデント整列エンジン】
     function formatIndent() {
       const textarea = document.getElementById('inputText');
       const text = textarea.value;
       if (!text.trim()) { alert('コードを入力してね！'); return; }
 
-      const VOID_TAGS = new Set([
-        'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
-        'link', 'meta', 'param', 'source', 'track', 'wbr', '!doctype', '?!=', '?='
-      ]);
-
       const lines = text.split('\n');
       const formattedLines = [];
-      let depth = 0;
-      const indentUnit = '  '; // 確実な半角スペース2つ
+      const indentUnit = '  '; // 半角スペース2文字
       let modifiedCount = 0;
 
-      for (let i = 0; i < lines.length; i++) {
-        const raw = lines[i];
-        const trimmed = raw.trim();
+      // 判定: HTML構文を含むファイルかどうかを自動判定
+      const isHtmlDocument = /<!DOCTYPE html|<html[\s>]|<body[\s>]|<head[\s>]/i.test(text);
 
-        if (trimmed === '') {
-          if (raw !== '') modifiedCount++;
-          formattedLines.push('');
-          continue;
-        }
+      if (!isHtmlDocument) {
+        // ==========================================
+        // 🛠️ JS / GAS / JSON 専用インデントエンジン
+        // ==========================================
+        let depth = 0;
+        for (let i = 0; i < lines.length; i++) {
+          const raw = lines[i];
+          const trimmed = raw.trim();
 
-        // コメントや文字列リテラルをマスク（属性値内の > もマスクされる）
-        const clean = trimmed
-          .replace(/\/\*[\s\S]*?\*\//g, '')
-          .replace(/\/\/.*/g, '')
-          .replace(/<!--[\s\S]*?-->/g, '')
-          .replace(/`([^`\\]|\\.)*`/g, '""')
-          .replace(/"([^"\\]|\\.)*"/g, '""')
-          .replace(/'([^'\\]|\\.)*'/g, "''");
-
-        // 1. JS波かっこ {} のカウント
-        const openBraceCount = (clean.match(/\{/g) || []).length;
-        const closeBraceCount = (clean.match(/\}/g) || []).length;
-
-        // 2. HTMLタグのカウント
-        let openTagCount = 0;
-        let closeTagCount = 0;
-
-        const tagMatches = clean.match(/<[^>]+>/g) || [];
-        tagMatches.forEach(tagStr => {
-          const m = tagStr.match(/^<\/?([a-zA-Z0-9\-_:!]+)/);
-          if (!m) return;
-          const tagName = m[1].toLowerCase();
-          const isClose = tagStr.startsWith('</');
-          const isSelf = /\/\s*>$/.test(tagStr) || tagStr.startsWith('<?') || tagStr.startsWith('<!') || VOID_TAGS.has(tagName);
-
-          if (!isSelf) {
-            if (isClose) closeTagCount++;
-            else openTagCount++;
-          }
-        });
-
-        // 閉じかっこや閉じタグから始まる行の判定（連続する閉じ要素をカウントして正しくデクリメント）
-        let leadingCloseCount = 0;
-        let testStr = trimmed;
-        while (true) {
-          const matchTag = testStr.match(/^<\/[a-zA-Z0-9\-_]+>/);
-          if (matchTag) {
-            leadingCloseCount++;
-            testStr = testStr.slice(matchTag[0].length).trim();
+          if (trimmed === '') {
+            if (raw !== '') modifiedCount++;
+            formattedLines.push('');
             continue;
           }
-          const matchBrace = testStr.match(/^[}\])]/);
-          if (matchBrace) {
-            leadingCloseCount++;
-            testStr = testStr.slice(1).trim();
+
+          // コメントや文字列リテラルをマスク
+          const clean = trimmed
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/\/\/.*/g, '')
+            .replace(/`([^`\\]|\\.)*`/g, '""')
+            .replace(/"([^"\\]|\\.)*"/g, '""')
+            .replace(/'([^'\\]|\\.)*'/g, "''");
+
+          // 行頭の閉じかっこ（}, ], )）の数を判定
+          let leadingCloses = 0;
+          let testStr = clean;
+          while (testStr.length > 0) {
+            const m = testStr.match(/^[}\]\)]/);
+            if (m) {
+              leadingCloses++;
+              testStr = testStr.slice(1).trim();
+            } else {
+              break;
+            }
+          }
+
+          const currentLineDepth = Math.max(0, depth - leadingCloses);
+          const newLine = indentUnit.repeat(currentLineDepth) + trimmed;
+          if (newLine !== raw) modifiedCount++;
+          formattedLines.push(newLine);
+
+          // 行全体の開閉かっこ差分を次の行へ反映
+          const openB = (clean.match(/[{\[\(]/g) || []).length;
+          const closeB = (clean.match(/[}\]\)]/g) || []).length;
+          depth = Math.max(0, depth + (openB - closeB));
+        }
+      } else {
+        // ==========================================
+        // 🌐 HTML 専用インデントエンジン
+        // ==========================================
+        const VOID_TAGS = new Set([
+          'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
+          'link', 'meta', 'param', 'source', 'track', 'wbr', '!doctype'
+        ]);
+
+        const tagStack = [];
+        let braceDepth = 0;
+        let inScriptOrStyle = false;
+
+        for (let i = 0; i < lines.length; i++) {
+          const raw = lines[i];
+          const trimmed = raw.trim();
+
+          if (trimmed === '') {
+            if (raw !== '') modifiedCount++;
+            formattedLines.push('');
             continue;
           }
-          break;
+
+          let clean = trimmed
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/\/\/.*/g, '')
+            .replace(/<!--[\s\S]*?-->/g, '')
+            .replace(/<\?[\s\S]*?\?>/g, '')
+            .replace(/`([^`\\]|\\.)*`/g, '""')
+            .replace(/"([^"\\]|\\.)*"/g, '""')
+            .replace(/'([^'\\]|\\.)*'/g, "''");
+
+          const headCloseTagMatch = clean.match(/^<\/([a-zA-Z0-9\-_:]+)/i);
+          const headCloseTagName = headCloseTagMatch ? headCloseTagMatch[1].toLowerCase() : null;
+          const headCloseBrace = /^[\}\]\)]/.test(clean);
+
+          let renderDepth = tagStack.length + braceDepth;
+
+          if (headCloseTagName) {
+            if (headCloseTagName === 'html') {
+              renderDepth = 0;
+            } else if (headCloseTagName === 'body') {
+              renderDepth = 1;
+            } else if (headCloseTagName === 'head') {
+              renderDepth = 1;
+            } else if (headCloseTagName === 'script' || headCloseTagName === 'style') {
+              renderDepth = Math.max(0, tagStack.length - 1);
+            } else {
+              const idx = tagStack.lastIndexOf(headCloseTagName);
+              renderDepth = (idx !== -1) ? idx : Math.max(0, tagStack.length - 1);
+            }
+          } else if (headCloseBrace) {
+            renderDepth = Math.max(0, renderDepth - 1);
+          }
+
+          const lineTags = clean.match(/<[^>]+>/g) || [];
+          lineTags.forEach(tagStr => {
+            const m = tagStr.match(/^<\/?([a-zA-Z0-9\-_:!]+)/i);
+            if (!m) return;
+            const tagName = m[1].toLowerCase();
+            const isClose = /^<\/\s*[a-zA-Z0-9\-_:]+/i.test(tagStr);
+            const isSelf = /\/\s*>$/.test(tagStr) || tagStr.startsWith('<!') || tagStr.startsWith('<?') || VOID_TAGS.has(tagName);
+
+            if (!isSelf) {
+              if (isClose) {
+                if (tagName === 'script' || tagName === 'style') {
+                  inScriptOrStyle = false;
+                  braceDepth = 0;
+                }
+                const idx = tagStack.lastIndexOf(tagName);
+                if (idx !== -1) {
+                  tagStack.splice(idx, 1);
+                } else if (tagStack.length > 0 && tagName !== 'body' && tagName !== 'html') {
+                  tagStack.pop();
+                }
+              } else {
+                tagStack.push(tagName);
+                if (tagName === 'script' || tagName === 'style') {
+                  inScriptOrStyle = true;
+                  braceDepth = 0;
+                }
+              }
+            }
+          });
+
+          if (inScriptOrStyle) {
+            const openB = (clean.match(/\{/g) || []).length;
+            const closeB = (clean.match(/\}/g) || []).length;
+            braceDepth = Math.max(0, braceDepth + (openB - closeB));
+          }
+
+          const newLine = indentUnit.repeat(Math.max(0, renderDepth)) + trimmed;
+          if (newLine !== raw) modifiedCount++;
+          formattedLines.push(newLine);
         }
-
-        let currentLineDepth = depth;
-        if (leadingCloseCount > 0) {
-          currentLineDepth = Math.max(0, depth - leadingCloseCount);
-        }
-
-        const newLine = indentUnit.repeat(Math.max(0, currentLineDepth)) + trimmed;
-        if (newLine !== raw) modifiedCount++;
-
-        formattedLines.push(newLine);
-
-        // 次の行への深さ更新
-        const netChange = (openBraceCount - closeBraceCount) + (openTagCount - closeTagCount);
-        depth += netChange;
-        if (depth < 0) depth = 0;
       }
 
       textarea.value = formattedLines.join('\n');
@@ -526,7 +590,7 @@
 
         const VOID_TAGS = new Set([
           'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
-          'link', 'meta', 'param', 'source', 'track', 'wbr', '!doctype', '?!=', '?='
+          'link', 'meta', 'param', 'source', 'track', 'wbr', '!doctype'
         ]);
 
         let line = 1;
@@ -541,7 +605,7 @@
         let tagStartLine = 1;
         let tagStartCol = 1;
         let currentTagBuffer = '';
-        let tagQuote = null; // タグ属性内のクォート状態追跡
+        let tagQuote = null;
 
         for (let i = 0; i < len; i++) {
           const c = chars[i];
@@ -583,12 +647,11 @@
               quoteStart = { line, col: col - 1, char: '`' };
               continue;
             } else if (c === '/' && /[=(:,;!&|?{\[\n~]/.test(prevChar)) {
-              // 割り算ではなく正規表現の可能性が高い記号のみに限定
               state = 'REGEX';
               continue;
             }
 
-            // HTMLタグ解析（属性値内の > での誤爆を完全防御）
+            // HTMLタグ解析
             if (c === '<' && /[a-zA-Z\/!?]/.test(next) && !isInsideHtmlTag) {
               isInsideHtmlTag = true;
               tagStartIndex = i;
@@ -609,9 +672,9 @@
                   isInsideHtmlTag = false;
 
                   const rawTag = currentTagBuffer.trim();
-                  const isCloseTag = rawTag.startsWith('</');
+                  const isCloseTag = /^<\/\s*[a-zA-Z0-9\-_:]+/i.test(rawTag);
                   const isSelfClosing = /\/\s*>$/.test(rawTag) || rawTag.startsWith('<?') || rawTag.startsWith('<!');
-                  const tagNameMatch = rawTag.match(/^<\/?([a-zA-Z0-9\-_:!]+)/);
+                  const tagNameMatch = rawTag.match(/^<\/?([a-zA-Z0-9\-_:!]+)/i);
                   const tagName = tagNameMatch ? tagNameMatch[1].toLowerCase() : '';
 
                   let tagDepth = 1;
