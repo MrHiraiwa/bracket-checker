@@ -282,7 +282,7 @@
         </a>
       </p>
       <p style="margin: 0; font-size: 0.8rem; opacity: 0.7;">
-        &copy; 2026 MrHiraiwa | Released under the MIT License
+        &copy; 2026 Masatoshi Hiraiwa | Released under the MIT License
       </p>
     </footer>
   </div>
@@ -411,7 +411,7 @@
       const lines = text.split('\n');
       const formattedLines = [];
       let depth = 0;
-      const indentUnit = '  ';
+      const indentUnit = '  '; // 確実な半角スペース2つ
       let modifiedCount = 0;
 
       for (let i = 0; i < lines.length; i++) {
@@ -424,7 +424,7 @@
           continue;
         }
 
-        // コメントや文字列リテラルをマスク
+        // コメントや文字列リテラルをマスク（属性値内の > もマスクされる）
         const clean = trimmed
           .replace(/\/\*[\s\S]*?\*\//g, '')
           .replace(/\/\/.*/g, '')
@@ -437,7 +437,7 @@
         const openBraceCount = (clean.match(/\{/g) || []).length;
         const closeBraceCount = (clean.match(/\}/g) || []).length;
 
-        // 2. HTMLタグのカウント（html, head, body, script も確実に拾う）
+        // 2. HTMLタグのカウント
         let openTagCount = 0;
         let closeTagCount = 0;
 
@@ -447,7 +447,7 @@
           if (!m) return;
           const tagName = m[1].toLowerCase();
           const isClose = tagStr.startsWith('</');
-          const isSelf = tagStr.endsWith('/>') || tagStr.startsWith('<?') || tagStr.startsWith('<!') || VOID_TAGS.has(tagName);
+          const isSelf = /\/\s*>$/.test(tagStr) || tagStr.startsWith('<?') || tagStr.startsWith('<!') || VOID_TAGS.has(tagName);
 
           if (!isSelf) {
             if (isClose) closeTagCount++;
@@ -455,15 +455,28 @@
           }
         });
 
-        // 閉じかっこや閉じタグから始まる行は、先行してインデントを1段下げる
-        let startsWithClose = false;
-        if (/^(<\/[a-zA-Z0-9\-_]+>|[}\])])/.test(trimmed)) {
-          startsWithClose = true;
+        // 閉じかっこや閉じタグから始まる行の判定（連続する閉じ要素をカウントして正しくデクリメント）
+        let leadingCloseCount = 0;
+        let testStr = trimmed;
+        while (true) {
+          const matchTag = testStr.match(/^<\/[a-zA-Z0-9\-_]+>/);
+          if (matchTag) {
+            leadingCloseCount++;
+            testStr = testStr.slice(matchTag[0].length).trim();
+            continue;
+          }
+          const matchBrace = testStr.match(/^[}\])]/);
+          if (matchBrace) {
+            leadingCloseCount++;
+            testStr = testStr.slice(1).trim();
+            continue;
+          }
+          break;
         }
 
         let currentLineDepth = depth;
-        if (startsWithClose && depth > 0) {
-          currentLineDepth = depth - 1;
+        if (leadingCloseCount > 0) {
+          currentLineDepth = Math.max(0, depth - leadingCloseCount);
         }
 
         const newLine = indentUnit.repeat(Math.max(0, currentLineDepth)) + trimmed;
@@ -528,6 +541,7 @@
         let tagStartLine = 1;
         let tagStartCol = 1;
         let currentTagBuffer = '';
+        let tagQuote = null; // タグ属性内のクォート状態追跡
 
         for (let i = 0; i < len; i++) {
           const c = chars[i];
@@ -568,72 +582,84 @@
               state = 'T_QUOTE';
               quoteStart = { line, col: col - 1, char: '`' };
               continue;
-            } else if (c === '/' && /[=(:,;!&|?{\[\n]/.test(prevChar)) {
+            } else if (c === '/' && /[=(:,;!&|?{\[\n~]/.test(prevChar)) {
+              // 割り算ではなく正規表現の可能性が高い記号のみに限定
               state = 'REGEX';
               continue;
             }
 
-            if (c === '<' && /[a-zA-Z\/!?]/.test(next)) {
+            // HTMLタグ解析（属性値内の > での誤爆を完全防御）
+            if (c === '<' && /[a-zA-Z\/!?]/.test(next) && !isInsideHtmlTag) {
               isInsideHtmlTag = true;
               tagStartIndex = i;
               tagStartLine = line;
               tagStartCol = col - 1;
               currentTagBuffer = '<';
-            } else if (c === '>' && isInsideHtmlTag) {
-              isInsideHtmlTag = false;
-              currentTagBuffer += '>';
+              tagQuote = null;
+            } else if (isInsideHtmlTag) {
+              currentTagBuffer += c;
+              if (tagQuote) {
+                if (c === tagQuote && chars[i - 1] !== '\\') {
+                  tagQuote = null;
+                }
+              } else {
+                if (c === '"' || c === "'") {
+                  tagQuote = c;
+                } else if (c === '>') {
+                  isInsideHtmlTag = false;
 
-              const rawTag = currentTagBuffer.trim();
-              const isCloseTag = rawTag.startsWith('</');
-              const isSelfClosing = rawTag.endsWith('/>') || rawTag.startsWith('<?') || rawTag.startsWith('<!');
-              const tagNameMatch = rawTag.match(/^<\/?([a-zA-Z0-9\-_:!]+)/);
-              const tagName = tagNameMatch ? tagNameMatch[1].toLowerCase() : '';
+                  const rawTag = currentTagBuffer.trim();
+                  const isCloseTag = rawTag.startsWith('</');
+                  const isSelfClosing = /\/\s*>$/.test(rawTag) || rawTag.startsWith('<?') || rawTag.startsWith('<!');
+                  const tagNameMatch = rawTag.match(/^<\/?([a-zA-Z0-9\-_:!]+)/);
+                  const tagName = tagNameMatch ? tagNameMatch[1].toLowerCase() : '';
 
-              let tagDepth = 1;
-              let scopeId = null;
+                  let tagDepth = 1;
+                  let scopeId = null;
 
-              if (tagName && !VOID_TAGS.has(tagName) && !isSelfClosing) {
-                if (isCloseTag) {
-                  if (htmlElementStack.length > 0) {
-                    const topElem = htmlElementStack.pop();
-                    tagDepth = topElem.depth;
-                    scopeId = topElem.id;
-                    if (topElem.openLine !== line) {
-                      htmlScopes.push({
-                        id: topElem.id,
-                        tagName: topElem.tagName,
-                        startLine: topElem.openLine,
-                        endLine: line,
-                        depth: topElem.depth
+                  if (tagName && !VOID_TAGS.has(tagName) && !isSelfClosing) {
+                    if (isCloseTag) {
+                      if (htmlElementStack.length > 0) {
+                        const topElem = htmlElementStack.pop();
+                        tagDepth = topElem.depth;
+                        scopeId = topElem.id;
+                        if (topElem.openLine !== line) {
+                          htmlScopes.push({
+                            id: topElem.id,
+                            tagName: topElem.tagName,
+                            startLine: topElem.openLine,
+                            endLine: line,
+                            depth: topElem.depth
+                          });
+                        }
+                      }
+                    } else {
+                      tagDepth = htmlElementStack.length + 1;
+                      scopeId = pairCounter++;
+                      htmlElementStack.push({
+                        id: scopeId,
+                        tagName,
+                        depth: tagDepth,
+                        openLine: tagStartLine
                       });
                     }
                   }
-                } else {
-                  tagDepth = htmlElementStack.length + 1;
-                  scopeId = pairCounter++;
-                  htmlElementStack.push({
-                    id: scopeId,
-                    tagName,
+
+                  tagTokens.push({
+                    startLine: tagStartLine,
+                    startCol: tagStartCol,
+                    endLine: line,
+                    endCol: col - 1,
                     depth: tagDepth,
-                    openLine: tagStartLine
+                    scopeId
                   });
+
+                  currentTagBuffer = '';
                 }
               }
-
-              tagTokens.push({
-                startLine: tagStartLine,
-                startCol: tagStartCol,
-                endLine: line,
-                endCol: col - 1,
-                depth: tagDepth,
-                scopeId
-              });
-
-              currentTagBuffer = '';
-            } else if (isInsideHtmlTag) {
-              currentTagBuffer += c;
             }
 
+            // JSかっこ判定
             if (c === '{' || c === '(' || c === '[') {
               if (c === '{') currentJsDepth++;
               allStack.push({
