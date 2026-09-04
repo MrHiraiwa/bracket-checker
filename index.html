@@ -6,1061 +6,1097 @@
 -->
 <!DOCTYPE html>
 <html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>インデント整形 ＆ 階層レインボーかっこチェッカー 🔍</title>
-  <style>
-    :root {
-      --bg: #0f172a;
-      --card: #1e293b;
-      --text: #e2e8f0;
-      --accent: #38bdf8;
-      --danger: #ef4444;
-      --danger-bg: #450a0a;
-      --border: #334155;
-      --success: #10b981;
-    }
-    body {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      background: var(--bg);
-      color: var(--text);
-      margin: 0;
-      padding: 20px;
-      line-height: 1.5;
-    }
-    .container { max-width: 1280px; margin: 0 auto; }
-    textarea {
-      width: 100%;
-      height: 200px;
-      background: #090d16;
-      color: #94a3b8;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 12px;
-      box-sizing: border-box;
-      font-family: inherit;
-      font-size: 0.9rem;
-      resize: vertical;
-      outline: none;
-    }
-    textarea:focus { border-color: var(--accent); }
-    .file-bar {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 10px;
-      flex-wrap: wrap;
-    }
-    .btn-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin: 12px 0;
-    }
-    button, .file-btn {
-      padding: 10px 16px;
-      font-size: 0.9rem;
-      font-weight: bold;
-      color: #fff;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: 0.2s;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-    }
-    .btn-primary { background: #2563eb; flex: 2; min-width: 180px; }
-    .btn-primary:hover { background: #1d4ed8; }
-    .btn-format { background: #059669; flex: 2; min-width: 180px; }
-    .btn-format:hover { background: #047857; }
-    .btn-sub { background: #475569; flex: 1; min-width: 100px; }
-    .btn-sub:hover { background: #334155; }
-    .btn-clear { background: #7f1d1d; color: #fca5a5; border: 1px solid #991b1b; flex: 1; min-width: 100px; }
-    .btn-clear:hover { background: #991b1b; color: #fff; }
-    .file-btn { background: #0284c7; }
-    .file-btn:hover { background: #0369a1; }
-    .panel {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 16px;
-      margin-bottom: 16px;
-    }
-    .culprit-card {
-      background: var(--danger-bg);
-      border: 1px solid #991b1b;
-      border-left: 6px solid var(--danger);
-      border-radius: 6px;
-      padding: 12px 16px;
-      margin-bottom: 10px;
-    }
-    #codeViewer {
-      background: #020617;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 12px;
-      height: 560px;
-      overflow: auto;
-      font-size: 0.85rem;
-      white-space: pre;
-      contain: content;
-    }
-    .code-line {
-      display: flex;
-      align-items: center;
-      height: 1.6em;
-      box-sizing: border-box;
-      transition: background 0.15s;
-    }
-    .code-line.culprit-highlight {
-      background: rgba(239, 68, 68, 0.25) !important;
-    }
-    .code-line.scope-active {
-      background: rgba(56, 189, 248, 0.12) !important;
-    }
-    .line-num {
-      width: 48px;
-      flex-shrink: 0;
-      color: #475569;
-      user-select: none;
-      text-align: right;
-      padding-right: 10px;
-      font-size: 0.8rem;
-    }
-    .track-container {
-      display: flex;
-      gap: 4px;
-      margin-right: 10px;
-      height: 100%;
-      flex-shrink: 0;
-    }
-    .depth-indicator {
-      flex-shrink: 0;
-      height: 100%;
-      border-radius: 1px;
-      transition: width 0.2s;
-    }
-    .line-content {
-      flex: 1;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: pre;
-    }
-    .bracket-pair {
-      font-weight: bold;
-      border-bottom: 2px solid;
-    }
-    .tag-clickable {
-      font-weight: bold;
-      cursor: pointer;
-      border-radius: 3px;
-      padding: 0 2px;
-      transition: background 0.15s;
-    }
-    .tag-clickable:hover {
-      background: rgba(255, 255, 255, 0.2);
-    }
-    .toggle-bar {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
-    .toggle-btn {
-      padding: 4px 10px;
-      font-size: 0.75rem;
-      border-radius: 4px;
-      background: #334155;
-      color: #cbd5e1;
-      border: 1px solid var(--border);
-      cursor: pointer;
-    }
-    .toggle-btn.is-active {
-      background: var(--accent);
-      color: #0f172a;
-      font-weight: bold;
-      border-color: var(--accent);
-    }
-    .notice {
-      color: var(--success);
-      font-size: 0.85rem;
-      font-weight: bold;
-      margin-left: 10px;
-    }
-    .edit-badge {
-      display: inline-block;
-      background: #f59e0b;
-      color: #0f172a;
-      font-size: 0.75rem;
-      font-weight: bold;
-      padding: 2px 6px;
-      border-radius: 4px;
-      margin-left: 6px;
-    }
-    footer {
-      margin-top: 50px;
-      padding: 24px 0;
-      text-align: center;
-      border-top: 1px solid var(--border);
-      font-size: 0.85rem;
-      color: #94a3b8;
-    }
-    .note-link {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      color: var(--accent);
-      text-decoration: none;
-      font-weight: bold;
-      padding: 6px 14px;
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      background: rgba(56, 189, 248, 0.08);
-      transition: all 0.2s;
-    }
-    .note-link:hover {
-      background: rgba(56, 189, 248, 0.2);
-      border-color: var(--accent);
-      text-decoration: underline;
-    }
-  </style>
-</head>
-<body>
-
-  <div class="container">
-    <h2 style="color:var(--accent); margin:0 0 8px;">✨ インデント整形 ＆ 階層レインボーかっこチェッカー</h2>
-    <div style="font-size:0.85rem; color:#94a3b8; margin-bottom:14px;">
-      HTMLタグ範囲と波かっこ階層をデュアルトラック表示！タグクリックで囲み範囲を一発ハイライト 🕵️‍♀️🎨
-    </div>
-
-    <div class="file-bar">
-      <label class="file-btn">
-        📁 ファイルを選択して読み込む
-        <input type="file" id="fileInput" accept=".js,.gs,.txt,.html,.json,.ts" style="display:none;" onchange="handleFileSelect(event)">
-      </label>
-      <span id="loadedFileName" style="font-size:0.85rem; color:#cbd5e1;">(ファイル未選択)</span>
-      <span id="editStatusBadge" style="display:none;" class="edit-badge">編集中 ✏️</span>
-    </div>
-
-    <textarea id="inputText" placeholder="コードを貼り付けるか、上のボタンからファイルを選択してね！"></textarea>
-    
-    <div class="btn-row">
-      <button class="btn-format" onclick="formatIndent()">🧹 行頭インデントを自動整列</button>
-      <button class="btn-primary" onclick="huntCulprit()">🔍 真犯人スキャン ＆ 階層可視化</button>
-      <button class="btn-sub" onclick="downloadFormattedFile()">💾 保存 (DL)</button>
-      <button class="btn-sub" onclick="copyText()">📋 コピー</button>
-      <button class="btn-clear" onclick="clearText()">🗑️ クリア</button>
-      <span id="statusNotice" class="notice"></span>
-    </div>
-
-    <div id="culpritPanel" class="panel" style="display:none;">
-      <h3 style="margin:0 0 10px; color:#f87171;">🎯 真犯人（ズレの発生源）候補</h3>
-      <div id="culpritList"></div>
-    </div>
-
-    <div id="viewerPanel" class="panel" style="display:none;">
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
-        <h3 style="margin:0; color:var(--accent);">👀 階層デュアルビューアー</h3>
-        <div class="toggle-bar">
-          <span style="font-size:0.8rem; color:#94a3b8;">トラック表示切替:</span>
-          <button id="toggleHtmlTrack" class="toggle-btn is-active" onclick="toggleTrack('html')">🏷️ HTML範囲バー</button>
-          <button id="toggleJsTrack" class="toggle-btn is-active" onclick="toggleTrack('js')">🌈 JS波かっこバー</button>
-        </div>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>インデント整形 ＆ 階層レインボーかっこチェッカー 🔍</title>
+    <style>
+      :root {
+        --bg: #0f172a;
+        --card: #1e293b;
+        --text: #e2e8f0;
+        --accent: #38bdf8;
+        --danger: #ef4444;
+        --danger-bg: #450a0a;
+        --border: #334155;
+        --success: #10b981;
+      }
+      body {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        background: var(--bg);
+        color: var(--text);
+        margin: 0;
+        padding: 20px;
+        line-height: 1.5;
+      }
+      .container { max-width: 1280px; margin: 0 auto; }
+      textarea {
+        width: 100%;
+        height: 200px;
+        background: #090d16;
+        color: #94a3b8;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 12px;
+        box-sizing: border-box;
+        font-family: inherit;
+        font-size: 0.9rem;
+        resize: vertical;
+        outline: none;
+      }
+      textarea:focus { border-color: var(--accent); }
+      .file-bar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 10px;
+        flex-wrap: wrap;
+      }
+      .btn-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 12px 0;
+      }
+      button, .file-btn {
+        padding: 10px 16px;
+        font-size: 0.9rem;
+        font-weight: bold;
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: 0.2s;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+      }
+      .btn-primary { background: #2563eb; flex: 2; min-width: 180px; }
+      .btn-primary:hover { background: #1d4ed8; }
+      .btn-format { background: #059669; flex: 2; min-width: 180px; }
+      .btn-format:hover { background: #047857; }
+      .btn-sub { background: #475569; flex: 1; min-width: 100px; }
+      .btn-sub:hover { background: #334155; }
+      .btn-clear { background: #7f1d1d; color: #fca5a5; border: 1px solid #991b1b; flex: 1; min-width: 100px; }
+      .btn-clear:hover { background: #991b1b; color: #fff; }
+      .file-btn { background: #0284c7; }
+      .file-btn:hover { background: #0369a1; }
+      .panel {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 16px;
+      }
+      .culprit-card {
+        background: var(--danger-bg);
+        border: 1px solid #991b1b;
+        border-left: 6px solid var(--danger);
+        border-radius: 6px;
+        padding: 12px 16px;
+        margin-bottom: 10px;
+      }
+      #codeViewer {
+        background: #020617;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 12px;
+        height: 560px;
+        overflow: auto;
+        font-size: 0.85rem;
+        white-space: pre;
+        contain: content;
+      }
+      .code-line {
+        display: flex;
+        align-items: center;
+        height: 1.6em;
+        box-sizing: border-box;
+        transition: background 0.15s;
+      }
+      .code-line.culprit-highlight {
+        background: rgba(239, 68, 68, 0.25) !important;
+      }
+      .code-line.scope-active {
+        background: rgba(56, 189, 248, 0.12) !important;
+      }
+      .line-num {
+        width: 48px;
+        flex-shrink: 0;
+        color: #475569;
+        user-select: none;
+        text-align: right;
+        padding-right: 10px;
+        font-size: 0.8rem;
+      }
+      .track-container {
+        display: flex;
+        gap: 4px;
+        margin-right: 10px;
+        height: 100%;
+        flex-shrink: 0;
+      }
+      .depth-indicator {
+        flex-shrink: 0;
+        height: 100%;
+        border-radius: 1px;
+        transition: width 0.2s;
+      }
+      .line-content {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: pre;
+      }
+      .bracket-pair {
+        font-weight: bold;
+        border-bottom: 2px solid;
+      }
+      .tag-clickable {
+        font-weight: bold;
+        cursor: pointer;
+        border-radius: 3px;
+        padding: 0 2px;
+        transition: background 0.15s;
+      }
+      .tag-clickable:hover {
+        background: rgba(255, 255, 255, 0.2);
+      }
+      .toggle-bar {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .toggle-btn {
+        padding: 4px 10px;
+        font-size: 0.75rem;
+        border-radius: 4px;
+        background: #334155;
+        color: #cbd5e1;
+        border: 1px solid var(--border);
+        cursor: pointer;
+      }
+      .toggle-btn.is-active {
+        background: var(--accent);
+        color: #0f172a;
+        font-weight: bold;
+        border-color: var(--accent);
+      }
+      .notice {
+        color: var(--success);
+        font-size: 0.85rem;
+        font-weight: bold;
+        margin-left: 10px;
+      }
+      .edit-badge {
+        display: inline-block;
+        background: #f59e0b;
+        color: #0f172a;
+        font-size: 0.75rem;
+        font-weight: bold;
+        padding: 2px 6px;
+        border-radius: 4px;
+        margin-left: 6px;
+      }
+      footer {
+        margin-top: 50px;
+        padding: 24px 0;
+        text-align: center;
+        border-top: 1px solid var(--border);
+        font-size: 0.85rem;
+        color: #94a3b8;
+      }
+      .note-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--accent);
+        text-decoration: none;
+        font-weight: bold;
+        padding: 6px 14px;
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        background: rgba(56, 189, 248, 0.08);
+        transition: all 0.2s;
+      }
+      .note-link:hover {
+        background: rgba(56, 189, 248, 0.2);
+        border-color: var(--accent);
+        text-decoration: underline;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2 style="color:var(--accent); margin:0 0 8px;">✨ インデント整形 ＆ 階層レインボーかっこチェッカー</h2>
+      <div style="font-size:0.85rem; color:#94a3b8; margin-bottom:14px;">
+        HTMLタグ範囲と波かっこ階層をデュアルトラック表示！タグクリックで囲み範囲を一発ハイライト 🕵️‍♀️🎨
       </div>
-      <div id="codeViewer"></div>
+
+      <div class="file-bar">
+        <label class="file-btn">
+          📁 ファイルを選択して読み込む
+          <input type="file" id="fileInput" accept=".js,.gs,.txt,.html,.json,.ts" style="display:none;" onchange="handleFileSelect(event)">
+        </label>
+        <span id="loadedFileName" style="font-size:0.85rem; color:#cbd5e1;">(ファイル未選択)</span>
+        <span id="editStatusBadge" style="display:none;" class="edit-badge">編集中 ✏️</span>
+      </div>
+
+      <textarea id="inputText" placeholder="コードを貼り付けるか、上のボタンからファイルを選択してね！"></textarea>
+      
+      <div class="btn-row">
+        <button class="btn-format" onclick="formatIndent()">🧹 行頭インデントを自動整列</button>
+        <button class="btn-primary" onclick="huntCulprit()">🔍 真犯人スキャン ＆ 階層可視化</button>
+        <button class="btn-sub" onclick="downloadFormattedFile()">💾 保存 (DL)</button>
+        <button class="btn-sub" onclick="copyText()">📋 コピー</button>
+        <button class="btn-clear" onclick="clearText()">🗑️ クリア</button>
+        <span id="statusNotice" class="notice"></span>
+      </div>
+
+      <div id="culpritPanel" class="panel" style="display:none;">
+        <h3 style="margin:0 0 10px; color:#f87171;">🎯 真犯人（ズレの発生源）候補</h3>
+        <div id="culpritList"></div>
+      </div>
+
+      <div id="viewerPanel" class="panel" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+          <h3 style="margin:0; color:var(--accent);">👀 階層デュアルビューアー</h3>
+          <div class="toggle-bar">
+            <span style="font-size:0.8rem; color:#94a3b8;">トラック表示切替:</span>
+            <button id="toggleHtmlTrack" class="toggle-btn is-active" onclick="toggleTrack('html')">🏷️ HTML範囲バー</button>
+            <button id="toggleJsTrack" class="toggle-btn is-active" onclick="toggleTrack('js')">🌈 JS波かっこバー</button>
+          </div>
+        </div>
+        <div id="codeViewer"></div>
+      </div>
+
+      <footer>
+        <p style="margin: 0 0 12px; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
+          <a href="https://note.com" target="_blank" rel="noopener noreferrer" class="note-link">
+            📖 note開発ストーリーを読む ↗
+          </a>
+          <a href="https://github.com/MrHiraiwa/bracket-checker/issues" target="_blank" rel="noopener noreferrer" class="note-link" style="border-color: #f59e0b; color: #fbbf24; background: rgba(245, 158, 11, 0.08);">
+            🐛 バグ報告・ご意見はこちら ↗
+          </a>
+        </p>
+        <p style="margin: 0; font-size: 0.8rem; opacity: 0.7;">
+          &copy; 2026 Masatoshi Hiraiwa | Released under the MIT License
+        </p>
+      </footer>
     </div>
 
-    <footer>
-      <p style="margin: 0 0 12px; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;">
-        <a href="https://note.com" target="_blank" rel="noopener noreferrer" class="note-link">
-          📖 note開発ストーリーを読む ↗
-        </a>
-        <a href="https://github.com/MrHiraiwa/bracket-checker/issues" target="_blank" rel="noopener noreferrer" class="note-link" style="border-color: #f59e0b; color: #fbbf24; background: rgba(245, 158, 11, 0.08);">
-          🐛 バグ報告・ご意見はこちら ↗
-        </a>
-      </p>
-      <p style="margin: 0; font-size: 0.8rem; opacity: 0.7;">
-        &copy; 2026 Masatoshi Hiraiwa | Released under the MIT License
-      </p>
-    </footer>
-  </div>
+    <script>
+      let currentFileName = 'code.js';
+      let isFileLoaded = false;
+      let showHtmlTrack = true;
+      let showJsTrack = true;
 
-  <script>
-    let currentFileName = 'code.js';
-    let isFileLoaded = false;
-    let showHtmlTrack = true;
-    let showJsTrack = true;
+      const DEPTH_COLORS = [
+        '#38bdf8', '#4ade80', '#facc15', '#fb923c',
+        '#f472b6', '#a78bfa', '#2dd4bf', '#f87171'
+      ];
 
-    const DEPTH_COLORS = [
-      '#38bdf8', '#4ade80', '#facc15', '#fb923c',
-      '#f472b6', '#a78bfa', '#2dd4bf', '#f87171'
-    ];
-
-    function getColorForDepth(d) {
-      if (d <= 0) return '#475569';
-      return DEPTH_COLORS[(d - 1) % DEPTH_COLORS.length];
-    }
-
-    function toggleTrack(type) {
-      if (type === 'html') {
-        showHtmlTrack = !showHtmlTrack;
-        document.getElementById('toggleHtmlTrack').classList.toggle('is-active', showHtmlTrack);
-      } else if (type === 'js') {
-        showJsTrack = !showJsTrack;
-        document.getElementById('toggleJsTrack').classList.toggle('is-active', showJsTrack);
-      }
-      document.querySelectorAll('.track-html').forEach(el => el.style.display = showHtmlTrack ? '' : 'none');
-      document.querySelectorAll('.track-js').forEach(el => el.style.display = showJsTrack ? '' : 'none');
-    }
-
-    document.getElementById('inputText').addEventListener('input', () => {
-      const editBadge = document.getElementById('editStatusBadge');
-      if (isFileLoaded && editBadge) editBadge.style.display = 'inline-block';
-    });
-
-    function handleFileSelect(e) {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      currentFileName = file.name;
-      isFileLoaded = true;
-
-      document.getElementById('loadedFileName').textContent = `📄 ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
-      const editBadge = document.getElementById('editStatusBadge');
-      if (editBadge) editBadge.style.display = 'none';
-
-      const reader = new FileReader();
-      reader.onload = function(evt) {
-        document.getElementById('inputText').value = evt.target.result;
-        showNotice('📁 読み込み完了！');
-        huntCulprit();
-      };
-      reader.readAsText(file, 'UTF-8');
-      e.target.value = '';
-    }
-
-    function clearText() {
-      const textarea = document.getElementById('inputText');
-      if (textarea.value.trim().length > 0) {
-        if (!confirm('入力中のテキストと解析結果をクリアしますか？')) return;
+      function getColorForDepth(d) {
+        if (d <= 0) return '#475569';
+        return DEPTH_COLORS[(d - 1) % DEPTH_COLORS.length];
       }
 
-      textarea.value = '';
-      currentFileName = 'code.js';
-      isFileLoaded = false;
-
-      document.getElementById('loadedFileName').textContent = '(ファイル未選択)';
-      const editBadge = document.getElementById('editStatusBadge');
-      if (editBadge) editBadge.style.display = 'none';
-
-      document.getElementById('culpritPanel').style.display = 'none';
-      document.getElementById('viewerPanel').style.display = 'none';
-      document.getElementById('codeViewer').innerHTML = '';
-
-      showNotice('🗑️ クリアしました！');
-      textarea.focus();
-    }
-
-    function downloadFormattedFile() {
-      const text = document.getElementById('inputText').value;
-      if (!text.trim()) { alert('ダウンロードするコードがありません！'); return; }
-
-      const now = new Date();
-      const Y = now.getFullYear();
-      const M = String(now.getMonth() + 1).padStart(2, '0');
-      const D = String(now.getDate()).padStart(2, '0');
-      const h = String(now.getHours()).padStart(2, '0');
-      const m = String(now.getMinutes()).padStart(2, '0');
-      const timeStr = `${Y}${M}${D}_${h}${m}`;
-
-      const lastDot = currentFileName.lastIndexOf('.');
-      let base = currentFileName;
-      let ext = '.js';
-      if (lastDot !== -1) {
-        base = currentFileName.substring(0, lastDot);
-        ext = currentFileName.substring(lastDot);
-      }
-
-      const outName = `${base}_${timeStr}${ext}`;
-
-      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = outName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(a.href);
-
-      showNotice(`💾 ${outName} を保存したよ！`);
-    }
-
-    // 🧹【HTML ＆ JS/GAS 自動適応インデント整列エンジン】
-    function formatIndent() {
-      const textarea = document.getElementById('inputText');
-      const text = textarea.value;
-      if (!text.trim()) { alert('コードを入力してね！'); return; }
-
-      const lines = text.split('\n');
-      const formattedLines = [];
-      const indentUnit = '  '; // 半角スペース2文字
-      let modifiedCount = 0;
-
-      // 判定: HTML構文を含むファイルかどうかを自動判定
-      const isHtmlDocument = /<!DOCTYPE html|<html[\s>]|<body[\s>]|<head[\s>]/i.test(text);
-
-      if (!isHtmlDocument) {
-        // ==========================================
-        // 🛠️ JS / GAS / JSON 専用インデントエンジン
-        // ==========================================
-        let depth = 0;
-        for (let i = 0; i < lines.length; i++) {
-          const raw = lines[i];
-          const trimmed = raw.trim();
-
-          if (trimmed === '') {
-            if (raw !== '') modifiedCount++;
-            formattedLines.push('');
-            continue;
-          }
-
-          // コメントや文字列リテラルをマスク
-          const clean = trimmed
-            .replace(/\/\*[\s\S]*?\*\//g, '')
-            .replace(/\/\/.*/g, '')
-            .replace(/`([^`\\]|\\.)*`/g, '""')
-            .replace(/"([^"\\]|\\.)*"/g, '""')
-            .replace(/'([^'\\]|\\.)*'/g, "''");
-
-          // 行頭の閉じかっこ（}, ], )）の数を判定
-          let leadingCloses = 0;
-          let testStr = clean;
-          while (testStr.length > 0) {
-            const m = testStr.match(/^[}\]\)]/);
-            if (m) {
-              leadingCloses++;
-              testStr = testStr.slice(1).trim();
-            } else {
-              break;
-            }
-          }
-
-          const currentLineDepth = Math.max(0, depth - leadingCloses);
-          const newLine = indentUnit.repeat(currentLineDepth) + trimmed;
-          if (newLine !== raw) modifiedCount++;
-          formattedLines.push(newLine);
-
-          // 行全体の開閉かっこ差分を次の行へ反映
-          const openB = (clean.match(/[{\[\(]/g) || []).length;
-          const closeB = (clean.match(/[}\]\)]/g) || []).length;
-          depth = Math.max(0, depth + (openB - closeB));
+      function toggleTrack(type) {
+        if (type === 'html') {
+          showHtmlTrack = !showHtmlTrack;
+          document.getElementById('toggleHtmlTrack').classList.toggle('is-active', showHtmlTrack);
+        } else if (type === 'js') {
+          showJsTrack = !showJsTrack;
+          document.getElementById('toggleJsTrack').classList.toggle('is-active', showJsTrack);
         }
-      } else {
-        // ==========================================
-        // 🌐 HTML 専用インデントエンジン
-        // ==========================================
-        const VOID_TAGS = new Set([
-          'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
-          'link', 'meta', 'param', 'source', 'track', 'wbr', '!doctype'
-        ]);
+        document.querySelectorAll('.track-html').forEach(el => el.style.display = showHtmlTrack ? '' : 'none');
+        document.querySelectorAll('.track-js').forEach(el => el.style.display = showJsTrack ? '' : 'none');
+      }
 
-        const tagStack = [];
-        let braceDepth = 0;
-        let inScriptOrStyle = false;
+      document.getElementById('inputText').addEventListener('input', () => {
+        const editBadge = document.getElementById('editStatusBadge');
+        if (isFileLoaded && editBadge) editBadge.style.display = 'inline-block';
+      });
 
-        for (let i = 0; i < lines.length; i++) {
-          const raw = lines[i];
-          const trimmed = raw.trim();
+      function handleFileSelect(e) {
+        const file = e.target.files[0];
+        if (!file) return;
 
-          if (trimmed === '') {
-            if (raw !== '') modifiedCount++;
-            formattedLines.push('');
-            continue;
-          }
+        currentFileName = file.name;
+        isFileLoaded = true;
 
-          let clean = trimmed
-            .replace(/\/\*[\s\S]*?\*\//g, '')
-            .replace(/\/\/.*/g, '')
-            .replace(/<!--[\s\S]*?-->/g, '')
-            .replace(/<\?[\s\S]*?\?>/g, '')
-            .replace(/`([^`\\]|\\.)*`/g, '""')
-            .replace(/"([^"\\]|\\.)*"/g, '""')
-            .replace(/'([^'\\]|\\.)*'/g, "''");
+        document.getElementById('loadedFileName').textContent = `📄 ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+        const editBadge = document.getElementById('editStatusBadge');
+        if (editBadge) editBadge.style.display = 'none';
 
-          const headCloseTagMatch = clean.match(/^<\/([a-zA-Z0-9\-_:]+)/i);
-          const headCloseTagName = headCloseTagMatch ? headCloseTagMatch[1].toLowerCase() : null;
-          const headCloseBrace = /^[\}\]\)]/.test(clean);
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+          document.getElementById('inputText').value = evt.target.result;
+          showNotice('📁 読み込み完了！');
+          huntCulprit();
+        };
+        reader.readAsText(file, 'UTF-8');
+        e.target.value = '';
+      }
 
-          let renderDepth = tagStack.length + braceDepth;
+      function clearText() {
+        const textarea = document.getElementById('inputText');
+        if (textarea.value.trim().length > 0) {
+          if (!confirm('入力中のテキストと解析結果をクリアしますか？')) return;
+        }
 
-          if (headCloseTagName) {
-            if (headCloseTagName === 'html') {
-              renderDepth = 0;
-            } else if (headCloseTagName === 'body') {
-              renderDepth = 1;
-            } else if (headCloseTagName === 'head') {
-              renderDepth = 1;
-            } else if (headCloseTagName === 'script' || headCloseTagName === 'style') {
-              renderDepth = Math.max(0, tagStack.length - 1);
-            } else {
-              const idx = tagStack.lastIndexOf(headCloseTagName);
-              renderDepth = (idx !== -1) ? idx : Math.max(0, tagStack.length - 1);
+        textarea.value = '';
+        currentFileName = 'code.js';
+        isFileLoaded = false;
+
+        document.getElementById('loadedFileName').textContent = '(ファイル未選択)';
+        const editBadge = document.getElementById('editStatusBadge');
+        if (editBadge) editBadge.style.display = 'none';
+
+        document.getElementById('culpritPanel').style.display = 'none';
+        document.getElementById('viewerPanel').style.display = 'none';
+        document.getElementById('codeViewer').innerHTML = '';
+
+        showNotice('🗑️ クリアしました！');
+        textarea.focus();
+      }
+
+      function downloadFormattedFile() {
+        const text = document.getElementById('inputText').value;
+        if (!text.trim()) { alert('ダウンロードするコードがありません！'); return; }
+
+        const now = new Date();
+        const Y = now.getFullYear();
+        const M = String(now.getMonth() + 1).padStart(2, '0');
+        const D = String(now.getDate()).padStart(2, '0');
+        const h = String(now.getHours()).padStart(2, '0');
+        const m = String(now.getMinutes()).padStart(2, '0');
+        const timeStr = `${Y}${M}${D}_${h}${m}`;
+
+        const lastDot = currentFileName.lastIndexOf('.');
+        let base = currentFileName;
+        let ext = '.js';
+        if (lastDot !== -1) {
+          base = currentFileName.substring(0, lastDot);
+          ext = currentFileName.substring(lastDot);
+        }
+
+        const outName = `${base}_${timeStr}${ext}`;
+
+        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = outName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(a.href);
+
+        showNotice(`💾 ${outName} を保存したよ！`);
+      }
+
+      // 🧹【HTML ＆ JS/GAS 自動適応インデント整列エンジン】
+      function formatIndent() {
+        const textarea = document.getElementById('inputText');
+        const text = textarea.value;
+        if (!text.trim()) { alert('コードを入力してね！'); return; }
+
+        const lines = text.split('\n');
+        const formattedLines = [];
+        const indentUnit = '  '; // 半角スペース2文字
+        let modifiedCount = 0;
+
+        const isHtmlDocument = /<!DOCTYPE html|<html[\s>]|<body[\s>]|<head[\s>]|<script[\s>]/i.test(text);
+
+        if (!isHtmlDocument) {
+          // ==========================================
+          // 🛠️ JS / GAS / JSON 専用インデントエンジン
+          // ==========================================
+          let depth = 0;
+          for (let i = 0; i < lines.length; i++) {
+            const raw = lines[i];
+            const trimmed = raw.trim();
+
+            if (trimmed === '') {
+              if (raw !== '') modifiedCount++;
+              formattedLines.push('');
+              continue;
             }
-          } else if (headCloseBrace) {
-            renderDepth = Math.max(0, renderDepth - 1);
+
+            const clean = trimmed
+              .replace(/\/\*[\s\S]*?\*\//g, '')
+              .replace(/\/\/.*/g, '')
+              .replace(/`([^`\\]|\\.)*`/g, '""')
+              .replace(/"([^"\\]|\\.)*"/g, '""')
+              .replace(/'([^'\\]|\\.)*'/g, "''");
+
+            let leadingCloses = 0;
+            let testStr = clean;
+            while (testStr.length > 0) {
+              const m = testStr.match(/^\}/);
+              if (m) {
+                leadingCloses++;
+                testStr = testStr.slice(1).trim();
+              } else {
+                break;
+              }
+            }
+
+            const currentLineDepth = Math.max(0, depth - leadingCloses);
+            const newLine = indentUnit.repeat(currentLineDepth) + trimmed;
+            if (newLine !== raw) modifiedCount++;
+            formattedLines.push(newLine);
+
+            const openB = (clean.match(/\{/g) || []).length;
+            const closeB = (clean.match(/\}/g) || []).length;
+            depth = Math.max(0, depth + (openB - closeB));
           }
+        } else {
+          // ==========================================
+          // 🌐 HTML 専用インデントエンジン（完全修正版）
+          // ==========================================
+          const VOID_TAGS = new Set([
+            'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
+            'link', 'meta', 'param', 'source', 'track', 'wbr', '!doctype'
+          ]);
 
-          const lineTags = clean.match(/<[^>]+>/g) || [];
-          lineTags.forEach(tagStr => {
-            const m = tagStr.match(/^<\/?([a-zA-Z0-9\-_:!]+)/i);
-            if (!m) return;
-            const tagName = m[1].toLowerCase();
-            const isClose = /^<\/\s*[a-zA-Z0-9\-_:]+/i.test(tagStr);
-            const isSelf = /\/\s*>$/.test(tagStr) || tagStr.startsWith('<!') || tagStr.startsWith('<?') || VOID_TAGS.has(tagName);
+          const tagStack = [];
+          let braceDepth = 0;
+          let inScriptOrStyle = false;
 
-            if (!isSelf) {
-              if (isClose) {
-                if (tagName === 'script' || tagName === 'style') {
-                  inScriptOrStyle = false;
-                  braceDepth = 0;
-                }
-                const idx = tagStack.lastIndexOf(tagName);
-                if (idx !== -1) {
-                  tagStack.splice(idx, 1);
-                } else if (tagStack.length > 0 && tagName !== 'body' && tagName !== 'html') {
-                  tagStack.pop();
+          for (let i = 0; i < lines.length; i++) {
+            const raw = lines[i];
+            const trimmed = raw.trim();
+
+            if (trimmed === '') {
+              if (raw !== '') modifiedCount++;
+              formattedLines.push('');
+              continue;
+            }
+
+            let clean = trimmed
+              .replace(/\/\*[\s\S]*?\*\//g, '')
+              .replace(/\/\/.*/g, '')
+              .replace(/<!--[\s\S]*?-->/g, '')
+              .replace(/<\?[\s\S]*?\?>/g, '');
+
+            const headCloseTagMatch = clean.match(/^<\/([a-zA-Z0-9\-_:]+)/i);
+            const headCloseTagName = headCloseTagMatch ? headCloseTagMatch[1].toLowerCase() : null;
+            const headCloseBrace = /^\}/.test(clean);
+
+            // タグの抽出
+            const lineTags = [];
+            let inAttrQuote = null;
+            let currentTag = '';
+            let insideTag = false;
+
+            for (let cIdx = 0; cIdx < clean.length; cIdx++) {
+              const ch = clean[cIdx];
+
+              if (!insideTag) {
+                if (ch === '<' && cIdx + 1 < clean.length && /[a-zA-Z\/!?]/.test(clean[cIdx + 1])) {
+                  insideTag = true;
+                  currentTag = '<';
+                  inAttrQuote = null;
                 }
               } else {
-                tagStack.push(tagName);
-                if (tagName === 'script' || tagName === 'style') {
-                  inScriptOrStyle = true;
-                  braceDepth = 0;
+                currentTag += ch;
+                if (inAttrQuote) {
+                  if (ch === inAttrQuote && clean[cIdx - 1] !== '\\') {
+                    inAttrQuote = null;
+                  }
+                } else {
+                  if (ch === '"' || ch === "'") {
+                    inAttrQuote = ch;
+                  } else if (ch === '>') {
+                    insideTag = false;
+                    lineTags.push(currentTag);
+                    currentTag = '';
+                  }
                 }
               }
             }
-          });
 
-          if (inScriptOrStyle) {
-            const openB = (clean.match(/\{/g) || []).length;
-            const closeB = (clean.match(/\}/g) || []).length;
-            braceDepth = Math.max(0, braceDepth + (openB - closeB));
+            // 行先頭のインデントを計算
+            // スクリプトタグ内の直下（braceDepth === 0）はインデントを増やさない
+            let htmlDepth = tagStack.length;
+            if (inScriptOrStyle) {
+              htmlDepth = Math.max(0, tagStack.length - 1);
+            }
+
+            let currentLineBrace = headCloseBrace ? Math.max(0, braceDepth - 1) : braceDepth;
+            let renderDepth = htmlDepth + currentLineBrace;
+
+            if (headCloseTagName) {
+              if (headCloseTagName === 'html') {
+                renderDepth = 0;
+              } else if (headCloseTagName === 'body' || headCloseTagName === 'head') {
+                renderDepth = 1;
+              } else if (headCloseTagName === 'script' || headCloseTagName === 'style') {
+                renderDepth = Math.max(0, tagStack.length - 1);
+              } else {
+                const idx = tagStack.lastIndexOf(headCloseTagName);
+                renderDepth = (idx !== -1) ? idx : Math.max(0, tagStack.length - 1);
+              }
+            }
+
+            // 1. 行の出力（インデント適用）
+            const newLine = indentUnit.repeat(Math.max(0, renderDepth)) + trimmed;
+            if (newLine !== raw) modifiedCount++;
+            formattedLines.push(newLine);
+
+            // 2. タグスタックの更新
+            lineTags.forEach(tagStr => {
+              const m = tagStr.match(/^<\/?([a-zA-Z0-9\-_:!]+)/i);
+              if (!m) return;
+              const tagName = m[1].toLowerCase();
+              const isClose = /^<\/\s*[a-zA-Z0-9\-_:]+/i.test(tagStr);
+
+              const isSelf = (tagName !== 'script' && tagName !== 'style') && 
+                (/\/\s*>$/.test(tagStr) || tagStr.startsWith('<!') || tagStr.startsWith('<?') || VOID_TAGS.has(tagName));
+
+              if (!isSelf) {
+                if (isClose) {
+                  if (tagName === 'script' || tagName === 'style') {
+                    inScriptOrStyle = false;
+                    braceDepth = 0;
+                  }
+                  const idx = tagStack.lastIndexOf(tagName);
+                  if (idx !== -1) {
+                    tagStack.splice(idx, 1);
+                  } else if (tagStack.length > 0 && tagName !== 'body' && tagName !== 'html') {
+                    tagStack.pop();
+                  }
+                } else {
+                  tagStack.push(tagName);
+                  if (tagName === 'script' || tagName === 'style') {
+                    inScriptOrStyle = true;
+                    braceDepth = 0;
+                  }
+                }
+              }
+            });
+
+            // 3. 次の行へ引き継ぐ波かっこ {} 深さを計算
+            if (inScriptOrStyle) {
+              const scriptCodeOnly = clean
+                .replace(/`([^`\\]|\\.)*`/g, '""')
+                .replace(/"([^"\\]|\\.)*"/g, '""')
+                .replace(/'([^'\\]|\\.)*'/g, "''");
+                
+              const openB = (scriptCodeOnly.match(/\{/g) || []).length;
+              const closeB = (scriptCodeOnly.match(/\}/g) || []).length;
+              braceDepth = Math.max(0, braceDepth + (openB - closeB));
+            }
+          }
+        }
+
+        textarea.value = formattedLines.join('\n');
+        if (modifiedCount > 0) {
+          showNotice(`🧹 全 ${lines.length} 行中、${modifiedCount} 行のインデントを整列したよ！`);
+        } else {
+          showNotice(`✨ すでに全 ${lines.length} 行きれいに整列されています！`);
+        }
+      }
+
+      function huntCulprit() {
+        try {
+          const text = document.getElementById('inputText').value;
+          if (!text.trim()) {
+            alert('コードを入力してね！');
+            return;
           }
 
-          const newLine = indentUnit.repeat(Math.max(0, renderDepth)) + trimmed;
-          if (newLine !== raw) modifiedCount++;
-          formattedLines.push(newLine);
-        }
-      }
+          const rawLines = text.split('\n');
+          const chars = text.split('');
+          const len = chars.length;
 
-      textarea.value = formattedLines.join('\n');
-      if (modifiedCount > 0) {
-        showNotice(`🧹 全 ${lines.length} 行中、${modifiedCount} 行のインデントを整列したよ！`);
-      } else {
-        showNotice(`✨ すでに全 ${lines.length} 行きれいに整列されています！`);
-      }
-    }
+          const pairedList = [];
+          const htmlScopes = [];
+          const tagTokens = [];
+          let pairCounter = 1;
+          const lineInfos = [];
 
-    function huntCulprit() {
-      try {
-        const text = document.getElementById('inputText').value;
-        if (!text.trim()) {
-          alert('コードを入力してね！');
-          return;
-        }
+          let currentJsDepth = 0;
+          let lowestJsDepth = 0;
+          let lowestJsDepthLine = 0;
 
-        const rawLines = text.split('\n');
-        const chars = text.split('');
-        const len = chars.length;
+          const allStack = [];
+          const htmlElementStack = [];
+          const culprits = [];
 
-        const pairedList = [];
-        const htmlScopes = [];
-        const tagTokens = [];
-        let pairCounter = 1;
-        const lineInfos = [];
+          const VOID_TAGS = new Set([
+            'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
+            'link', 'meta', 'param', 'source', 'track', 'wbr', '!doctype'
+          ]);
 
-        let currentJsDepth = 0;
-        let lowestJsDepth = 0;
-        let lowestJsDepthLine = 0;
+          let line = 1;
+          let col = 1;
+          let state = 'CODE';
+          let quoteStart = null;
+          let prevChar = '';
+          let lineDepthBefore = 0;
 
-        const allStack = [];
-        const htmlElementStack = [];
-        const culprits = [];
+          let isInsideHtmlTag = false;
+          let tagStartIndex = -1;
+          let tagStartLine = 1;
+          let tagStartCol = 1;
+          let currentTagBuffer = '';
+          let tagQuote = null;
 
-        const VOID_TAGS = new Set([
-          'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
-          'link', 'meta', 'param', 'source', 'track', 'wbr', '!doctype'
-        ]);
+          for (let i = 0; i < len; i++) {
+            const c = chars[i];
+            const next = chars[i + 1];
 
-        let line = 1;
-        let col = 1;
-        let state = 'CODE';
-        let quoteStart = null;
-        let prevChar = '';
-        let lineDepthBefore = 0;
+            if (c === '\n') {
+              lineInfos[line - 1] = {
+                lineNum: line,
+                depthBefore: lineDepthBefore,
+                depthAfter: currentJsDepth,
+                raw: rawLines[line - 1] ? rawLines[line - 1].trim() : ''
+              };
+              line++;
+              col = 1;
+              lineDepthBefore = currentJsDepth;
+            } else {
+              col++;
+            }
 
-        let isInsideHtmlTag = false;
-        let tagStartIndex = -1;
-        let tagStartLine = 1;
-        let tagStartCol = 1;
-        let currentTagBuffer = '';
-        let tagQuote = null;
+            if (state === 'CODE') {
+              if (c === '/' && next === '/') {
+                state = 'LINE_COMMENT';
+                i++; col++;
+                continue;
+              } else if (c === '/' && next === '*') {
+                state = 'BLOCK_COMMENT';
+                i++; col++;
+                continue;
+              } else if (c === "'") {
+                state = 'S_QUOTE';
+                quoteStart = { line, col: col - 1, char: "'" };
+                continue;
+              } else if (c === '"') {
+                state = 'D_QUOTE';
+                quoteStart = { line, col: col - 1, char: '"' };
+                continue;
+              } else if (c === '`') {
+                state = 'T_QUOTE';
+                quoteStart = { line, col: col - 1, char: '`' };
+                continue;
+              } else if (c === '/' && /[=(:,;!&|?{\[\n~]/.test(prevChar)) {
+                state = 'REGEX';
+                continue;
+              }
 
-        for (let i = 0; i < len; i++) {
-          const c = chars[i];
-          const next = chars[i + 1];
+              if (c === '<' && /[a-zA-Z\/!?]/.test(next) && !isInsideHtmlTag) {
+                isInsideHtmlTag = true;
+                tagStartIndex = i;
+                tagStartLine = line;
+                tagStartCol = col - 1;
+                currentTagBuffer = '<';
+                tagQuote = null;
+              } else if (isInsideHtmlTag) {
+                currentTagBuffer += c;
+                if (tagQuote) {
+                  if (c === tagQuote && chars[i - 1] !== '\\') {
+                    tagQuote = null;
+                  }
+                } else {
+                  if (c === '"' || c === "'") {
+                    tagQuote = c;
+                  } else if (c === '>') {
+                    isInsideHtmlTag = false;
 
-          if (c === '\n') {
+                    const rawTag = currentTagBuffer.trim();
+                    const isCloseTag = /^<\/\s*[a-zA-Z0-9\-_:]+/i.test(rawTag);
+                    const isSelfClosing = /\/\s*>$/.test(rawTag) || rawTag.startsWith('<?') || rawTag.startsWith('<!');
+                    const tagNameMatch = rawTag.match(/^<\/?([a-zA-Z0-9\-_:!]+)/i);
+                    const tagName = tagNameMatch ? tagNameMatch[1].toLowerCase() : '';
+
+                    let tagDepth = 1;
+                    let scopeId = null;
+
+                    if (tagName && !VOID_TAGS.has(tagName) && !isSelfClosing) {
+                      if (isCloseTag) {
+                        if (htmlElementStack.length > 0) {
+                          const topElem = htmlElementStack.pop();
+                          tagDepth = topElem.depth;
+                          scopeId = topElem.id;
+                          if (topElem.openLine !== line) {
+                            htmlScopes.push({
+                              id: topElem.id,
+                              tagName: topElem.tagName,
+                              startLine: topElem.openLine,
+                              endLine: line,
+                              depth: topElem.depth
+                            });
+                          }
+                        }
+                      } else {
+                        tagDepth = htmlElementStack.length + 1;
+                        scopeId = pairCounter++;
+                        htmlElementStack.push({
+                          id: scopeId,
+                          tagName,
+                          depth: tagDepth,
+                          openLine: tagStartLine
+                        });
+                      }
+                    }
+
+                    tagTokens.push({
+                      startLine: tagStartLine,
+                      startCol: tagStartCol,
+                      endLine: line,
+                      endCol: col - 1,
+                      depth: tagDepth,
+                      scopeId
+                    });
+
+                    currentTagBuffer = '';
+                  }
+                }
+              }
+
+              if (c === '{' || c === '(' || c === '[') {
+                if (c === '{') currentJsDepth++;
+                allStack.push({
+                  id: pairCounter++,
+                  char: c,
+                  lineNum: line,
+                  colNum: col - 1,
+                  depth: (c === '{' ? currentJsDepth : allStack.length + 1)
+                });
+              } else if (c === '}' || c === ')' || c === ']') {
+                if (c === '}') {
+                  currentJsDepth--;
+                  if (currentJsDepth < lowestJsDepth) {
+                    lowestJsDepth = currentJsDepth;
+                    lowestJsDepthLine = line;
+                  }
+                }
+
+                if (allStack.length > 0) {
+                  const top = allStack[allStack.length - 1];
+                  const expected = { '{': '}', '(': ')', '[': ']' }[top.char];
+                  if (expected === c) {
+                    const op = allStack.pop();
+                    pairedList.push({
+                      id: op.id,
+                      char: op.char,
+                      closeChar: c,
+                      openLine: op.lineNum,
+                      openCol: op.colNum,
+                      closeLine: line,
+                      closeCol: col - 1,
+                      depth: op.depth
+                    });
+                  } else if (culprits.length === 0) {
+                    culprits.push({
+                      score: 100,
+                      culpritLine: line,
+                      title: `かっこの種類が一致していません（交差エラー）`,
+                      desc: `<strong>${top.lineNum} 行目</strong> で開かれた「 <code>${top.char}</code> 」に対して、<strong>${line} 行目</strong> で「 <code>${c}</code> 」で閉じようとしています。「 <code>${expected}</code> 」で閉じる必要があります！`
+                    });
+                  }
+                }
+              }
+
+              if (!/\s/.test(c)) prevChar = c;
+
+            } else if (state === 'S_QUOTE') {
+              if (c === '\\') {
+                i++; col++;
+              } else if (c === "'") {
+                pairedList.push({
+                  id: pairCounter++,
+                  char: "'",
+                  closeChar: "'",
+                  openLine: quoteStart.line,
+                  openCol: quoteStart.col,
+                  closeLine: line,
+                  closeCol: col - 1,
+                  depth: 1
+                });
+                state = 'CODE';
+                prevChar = "'";
+              } else if (c === '\n' && culprits.length === 0) {
+                culprits.push({
+                  score: 95,
+                  culpritLine: quoteStart.line,
+                  title: `シングルクォート「 ' 」の閉じ忘れ`,
+                  desc: `<strong>${quoteStart.line} 行目</strong> で開かれた <code>'</code> が閉じられないまま改行されています！`
+                });
+                state = 'CODE';
+              }
+            } else if (state === 'D_QUOTE') {
+              if (c === '\\') {
+                i++; col++;
+              } else if (c === '"') {
+                pairedList.push({
+                  id: pairCounter++,
+                  char: '"',
+                  closeChar: '"',
+                  openLine: quoteStart.line,
+                  openCol: quoteStart.col,
+                  closeLine: line,
+                  closeCol: col - 1,
+                  depth: 1
+                });
+                state = 'CODE';
+                prevChar = '"';
+              } else if (c === '\n' && culprits.length === 0) {
+                culprits.push({
+                  score: 95,
+                  culpritLine: quoteStart.line,
+                  title: `ダブルクォート「 " 」の閉じ忘れ`,
+                  desc: `<strong>${quoteStart.line} 行目</strong> で開かれた <code>"</code> が閉じられないまま改行されています！`
+                });
+                state = 'CODE';
+              }
+            } else if (state === 'T_QUOTE') {
+              if (c === '\\') {
+                i++; col++;
+              } else if (c === '`') {
+                pairedList.push({
+                  id: pairCounter++,
+                  char: '`',
+                  closeChar: '`',
+                  openLine: quoteStart.line,
+                  openCol: quoteStart.col,
+                  closeLine: line,
+                  closeCol: col - 1,
+                  depth: 1
+                });
+                state = 'CODE';
+                prevChar = '`';
+              }
+            } else if (state === 'REGEX') {
+              if (c === '\\') {
+                i++; col++;
+              } else if (c === '/') {
+                state = 'CODE';
+                prevChar = '/';
+              }
+            } else if (state === 'LINE_COMMENT') {
+              if (c === '\n') state = 'CODE';
+            } else if (state === 'BLOCK_COMMENT') {
+              if (c === '*' && next === '/') {
+                state = 'CODE';
+                i++; col++;
+              }
+            }
+          }
+
+          if (!lineInfos[line - 1]) {
             lineInfos[line - 1] = {
               lineNum: line,
               depthBefore: lineDepthBefore,
               depthAfter: currentJsDepth,
               raw: rawLines[line - 1] ? rawLines[line - 1].trim() : ''
             };
-            line++;
-            col = 1;
-            lineDepthBefore = currentJsDepth;
-          } else {
-            col++;
           }
 
-          if (state === 'CODE') {
-            if (c === '/' && next === '/') {
-              state = 'LINE_COMMENT';
-              i++; col++;
-              continue;
-            } else if (c === '/' && next === '*') {
-              state = 'BLOCK_COMMENT';
-              i++; col++;
-              continue;
-            } else if (c === "'") {
-              state = 'S_QUOTE';
-              quoteStart = { line, col: col - 1, char: "'" };
-              continue;
-            } else if (c === '"') {
-              state = 'D_QUOTE';
-              quoteStart = { line, col: col - 1, char: '"' };
-              continue;
-            } else if (c === '`') {
-              state = 'T_QUOTE';
-              quoteStart = { line, col: col - 1, char: '`' };
-              continue;
-            } else if (c === '/' && /[=(:,;!&|?{\[\n~]/.test(prevChar)) {
-              state = 'REGEX';
-              continue;
-            }
-
-            // HTMLタグ解析
-            if (c === '<' && /[a-zA-Z\/!?]/.test(next) && !isInsideHtmlTag) {
-              isInsideHtmlTag = true;
-              tagStartIndex = i;
-              tagStartLine = line;
-              tagStartCol = col - 1;
-              currentTagBuffer = '<';
-              tagQuote = null;
-            } else if (isInsideHtmlTag) {
-              currentTagBuffer += c;
-              if (tagQuote) {
-                if (c === tagQuote && chars[i - 1] !== '\\') {
-                  tagQuote = null;
-                }
-              } else {
-                if (c === '"' || c === "'") {
-                  tagQuote = c;
-                } else if (c === '>') {
-                  isInsideHtmlTag = false;
-
-                  const rawTag = currentTagBuffer.trim();
-                  const isCloseTag = /^<\/\s*[a-zA-Z0-9\-_:]+/i.test(rawTag);
-                  const isSelfClosing = /\/\s*>$/.test(rawTag) || rawTag.startsWith('<?') || rawTag.startsWith('<!');
-                  const tagNameMatch = rawTag.match(/^<\/?([a-zA-Z0-9\-_:!]+)/i);
-                  const tagName = tagNameMatch ? tagNameMatch[1].toLowerCase() : '';
-
-                  let tagDepth = 1;
-                  let scopeId = null;
-
-                  if (tagName && !VOID_TAGS.has(tagName) && !isSelfClosing) {
-                    if (isCloseTag) {
-                      if (htmlElementStack.length > 0) {
-                        const topElem = htmlElementStack.pop();
-                        tagDepth = topElem.depth;
-                        scopeId = topElem.id;
-                        if (topElem.openLine !== line) {
-                          htmlScopes.push({
-                            id: topElem.id,
-                            tagName: topElem.tagName,
-                            startLine: topElem.openLine,
-                            endLine: line,
-                            depth: topElem.depth
-                          });
-                        }
-                      }
-                    } else {
-                      tagDepth = htmlElementStack.length + 1;
-                      scopeId = pairCounter++;
-                      htmlElementStack.push({
-                        id: scopeId,
-                        tagName,
-                        depth: tagDepth,
-                        openLine: tagStartLine
-                      });
-                    }
-                  }
-
-                  tagTokens.push({
-                    startLine: tagStartLine,
-                    startCol: tagStartCol,
-                    endLine: line,
-                    endCol: col - 1,
-                    depth: tagDepth,
-                    scopeId
-                  });
-
-                  currentTagBuffer = '';
-                }
-              }
-            }
-
-            // JSかっこ判定
-            if (c === '{' || c === '(' || c === '[') {
-              if (c === '{') currentJsDepth++;
-              allStack.push({
-                id: pairCounter++,
-                char: c,
-                lineNum: line,
-                colNum: col - 1,
-                depth: (c === '{' ? currentJsDepth : allStack.length + 1)
-              });
-            } else if (c === '}' || c === ')' || c === ']') {
-              if (c === '}') {
-                currentJsDepth--;
-                if (currentJsDepth < lowestJsDepth) {
-                  lowestJsDepth = currentJsDepth;
-                  lowestJsDepthLine = line;
-                }
-              }
-
-              if (allStack.length > 0) {
-                const top = allStack[allStack.length - 1];
-                const expected = { '{': '}', '(': ')', '[': ']' }[top.char];
-                if (expected === c) {
-                  const op = allStack.pop();
-                  pairedList.push({
-                    id: op.id,
-                    char: op.char,
-                    closeChar: c,
-                    openLine: op.lineNum,
-                    openCol: op.colNum,
-                    closeLine: line,
-                    closeCol: col - 1,
-                    depth: op.depth
-                  });
-                } else if (culprits.length === 0) {
-                  culprits.push({
-                    score: 100,
-                    culpritLine: line,
-                    title: `かっこの種類が一致していません（交差エラー）`,
-                    desc: `<strong>${top.lineNum} 行目</strong> で開かれた「 <code>${top.char}</code> 」に対して、<strong>${line} 行目</strong> で「 <code>${c}</code> 」で閉じようとしています。「 <code>${expected}</code> 」で閉じる必要があります！`
-                  });
-                }
-              }
-            }
-
-            if (!/\s/.test(c)) prevChar = c;
-
-          } else if (state === 'S_QUOTE') {
-            if (c === '\\') {
-              i++; col++;
-            } else if (c === "'") {
-              pairedList.push({
-                id: pairCounter++,
-                char: "'",
-                closeChar: "'",
-                openLine: quoteStart.line,
-                openCol: quoteStart.col,
-                closeLine: line,
-                closeCol: col - 1,
-                depth: 1
-              });
-              state = 'CODE';
-              prevChar = "'";
-            } else if (c === '\n' && culprits.length === 0) {
-              culprits.push({
-                score: 95,
-                culpritLine: quoteStart.line,
-                title: `シングルクォート「 ' 」の閉じ忘れ`,
-                desc: `<strong>${quoteStart.line} 行目</strong> で開かれた <code>'</code> が閉じられないまま改行されています！`
-              });
-              state = 'CODE';
-            }
-          } else if (state === 'D_QUOTE') {
-            if (c === '\\') {
-              i++; col++;
-            } else if (c === '"') {
-              pairedList.push({
-                id: pairCounter++,
-                char: '"',
-                closeChar: '"',
-                openLine: quoteStart.line,
-                openCol: quoteStart.col,
-                closeLine: line,
-                closeCol: col - 1,
-                depth: 1
-              });
-              state = 'CODE';
-              prevChar = '"';
-            } else if (c === '\n' && culprits.length === 0) {
-              culprits.push({
-                score: 95,
-                culpritLine: quoteStart.line,
-                title: `ダブルクォート「 " 」の閉じ忘れ`,
-                desc: `<strong>${quoteStart.line} 行目</strong> で開かれた <code>"</code> が閉じられないまま改行されています！`
-              });
-              state = 'CODE';
-            }
-          } else if (state === 'T_QUOTE') {
-            if (c === '\\') {
-              i++; col++;
-            } else if (c === '`') {
-              pairedList.push({
-                id: pairCounter++,
-                char: '`',
-                closeChar: '`',
-                openLine: quoteStart.line,
-                openCol: quoteStart.col,
-                closeLine: line,
-                closeCol: col - 1,
-                depth: 1
-              });
-              state = 'CODE';
-              prevChar = '`';
-            }
-          } else if (state === 'REGEX') {
-            if (c === '\\') {
-              i++; col++;
-            } else if (c === '/') {
-              state = 'CODE';
-              prevChar = '/';
-            }
-          } else if (state === 'LINE_COMMENT') {
-            if (c === '\n') state = 'CODE';
-          } else if (state === 'BLOCK_COMMENT') {
-            if (c === '*' && next === '/') {
-              state = 'CODE';
-              i++; col++;
-            }
+          if (lowestJsDepth < 0 && culprits.length === 0) {
+            culprits.push({
+              score: 99,
+              culpritLine: lowestJsDepthLine,
+              title: `余分な閉じかっこ「 } 」`,
+              desc: `<strong>${lowestJsDepthLine} 行目</strong> 付近で波かっこが深さ0を割り込んでいます。余計な <code>}</code> を1つ削除してください！`
+            });
           }
+
+          if (state === 'T_QUOTE' && culprits.length === 0) {
+            culprits.push({
+              score: 95,
+              culpritLine: quoteStart.line,
+              title: `バッククォート「 \` 」の閉じ忘れ`,
+              desc: `<strong>${quoteStart.line} 行目</strong> で開かれた <code>\`</code> がファイルの末尾まで閉じられていません！`
+            });
+          }
+
+          if (allStack.length > 0 && culprits.length === 0) {
+            const last = allStack[allStack.length - 1];
+            const expected = { '{': '}', '(': ')', '[': ']' }[last.char];
+            culprits.push({
+              score: 95,
+              culpritLine: last.lineNum,
+              title: `閉じかっこ「 ${expected} 」の不足`,
+              desc: `<strong>${last.lineNum} 行目</strong> で開かれた「 <code>${last.char}</code> 」がファイルの末尾まで閉じられていません。「 <code>${expected}</code> 」が不足しています！`
+            });
+          }
+
+          renderCulprits(culprits);
+          renderVisualViewer(rawLines, pairedList, tagTokens, htmlScopes, lineInfos, culprits);
+          showNotice('🔍 スキャン完了！');
+        } catch (err) {
+          console.error("Scan Error:", err);
+          alert(`スキャン中にエラーが発生しました: ${err.message}`);
         }
-
-        if (!lineInfos[line - 1]) {
-          lineInfos[line - 1] = {
-            lineNum: line,
-            depthBefore: lineDepthBefore,
-            depthAfter: currentJsDepth,
-            raw: rawLines[line - 1] ? rawLines[line - 1].trim() : ''
-          };
-        }
-
-        if (lowestJsDepth < 0 && culprits.length === 0) {
-          culprits.push({
-            score: 99,
-            culpritLine: lowestJsDepthLine,
-            title: `余分な閉じかっこ「 } 」`,
-            desc: `<strong>${lowestJsDepthLine} 行目</strong> 付近で波かっこが深さ0を割り込んでいます。余計な <code>}</code> を1つ削除してください！`
-          });
-        }
-
-        if (state === 'T_QUOTE' && culprits.length === 0) {
-          culprits.push({
-            score: 95,
-            culpritLine: quoteStart.line,
-            title: `バッククォート「 \` 」の閉じ忘れ`,
-            desc: `<strong>${quoteStart.line} 行目</strong> で開かれた <code>\`</code> がファイルの末尾まで閉じられていません！`
-          });
-        }
-
-        if (allStack.length > 0 && culprits.length === 0) {
-          const last = allStack[allStack.length - 1];
-          const expected = { '{': '}', '(': ')', '[': ']' }[last.char];
-          culprits.push({
-            score: 95,
-            culpritLine: last.lineNum,
-            title: `閉じかっこ「 ${expected} 」の不足`,
-            desc: `<strong>${last.lineNum} 行目</strong> で開かれた「 <code>${last.char}</code> 」がファイルの末尾まで閉じられていません。「 <code>${expected}</code> 」が不足しています！`
-          });
-        }
-
-        renderCulprits(culprits);
-        renderVisualViewer(rawLines, pairedList, tagTokens, htmlScopes, lineInfos, culprits);
-        showNotice('🔍 スキャン完了！');
-      } catch (err) {
-        console.error("Scan Error:", err);
-        alert(`スキャン中にエラーが発生しました: ${err.message}`);
-      }
-    }
-
-    function renderCulprits(culprits) {
-      const panel = document.getElementById('culpritPanel');
-      const list = document.getElementById('culpritList');
-      panel.style.display = 'block';
-
-      if (culprits.length === 0) {
-        list.innerHTML = '<span style="color:#4ade80; font-weight:bold;">🎉 構造上の深さズレは見つかりませんでした！完璧です✨</span>';
-        return;
       }
 
-      let html = '';
-      culprits.forEach((c, idx) => {
-        html += `
-          <div class="culprit-card">
-            <div style="font-size:1rem; font-weight:bold; color:#fca5a5;">🚨 真犯人 第${idx + 1}位: ${c.title}</div>
-            <div style="margin: 8px 0; font-size:0.9rem;">${c.desc}</div>
-            <button style="width:auto; padding:4px 12px; margin:4px 0 0; font-size:0.8rem; background:#dc2626;" onclick="jumpToLine(${c.culpritLine})">
-              👉 ${c.culpritLine} 行目へジャンプして確認
-            </button>
-          </div>
-        `;
-      });
-      list.innerHTML = html;
-    }
+      function renderCulprits(culprits) {
+        const panel = document.getElementById('culpritPanel');
+        const list = document.getElementById('culpritList');
+        panel.style.display = 'block';
 
-    function renderVisualViewer(rawLines, pairedList, tagTokens, htmlScopes, lineInfos, culprits) {
-      const panel = document.getElementById('viewerPanel');
-      const viewer = document.getElementById('codeViewer');
-      panel.style.display = 'block';
-
-      const openMap = {};
-      const closeMap = {};
-      pairedList.forEach(p => {
-        openMap[`${p.openLine}:${p.openCol}`] = p;
-        closeMap[`${p.closeLine}:${p.closeCol}`] = p;
-      });
-
-      const culpritLines = culprits.map(c => c.culpritLine);
-      const barWidth = 5;
-      const barGap = 2;
-      const totalStep = barWidth + barGap;
-
-      const lineHtmlDepths = new Array(rawLines.length + 1).fill(0);
-      htmlScopes.forEach(s => {
-        for (let l = s.startLine; l <= s.endLine; l++) {
-          lineHtmlDepths[l] = Math.max(lineHtmlDepths[l], s.depth);
-        }
-      });
-
-      let html = '';
-      rawLines.forEach((lineText, lIdx) => {
-        const lineNum = lIdx + 1;
-        const info = lineInfos[lIdx] || { depthBefore: 0, depthAfter: 0 };
-        const isCulprit = culpritLines.includes(lineNum);
-        
-        const jsDepth = Math.max(0, Math.max(info.depthBefore, info.depthAfter));
-        let jsBgStyle = 'style="width:0px;"';
-        if (jsDepth > 0) {
-          const stops = [];
-          for (let d = 1; d <= jsDepth; d++) {
-            const col = getColorForDepth(d);
-            const start = (d - 1) * totalStep;
-            const end = start + barWidth;
-            stops.push(`${col} ${start}px`, `${col} ${end}px`, `transparent ${end}px`, `transparent ${end + barGap}px`);
-          }
-          jsBgStyle = `style="width:${jsDepth * totalStep}px; background:repeating-linear-gradient(to right, ${stops.join(', ')});"`;
+        if (culprits.length === 0) {
+          list.innerHTML = '<span style="color:#4ade80; font-weight:bold;">🎉 構造上の深さズレは見つかりませんでした！完璧です✨</span>';
+          return;
         }
 
-        const htmlDepth = lineHtmlDepths[lineNum] || 0;
-        let htmlBgStyle = 'style="width:0px;"';
-        if (htmlDepth > 0) {
-          const stops = [];
-          for (let d = 1; d <= Math.min(6, htmlDepth); d++) {
-            const col = getColorForDepth(d);
-            const start = (d - 1) * totalStep;
-            const end = start + barWidth;
-            stops.push(`${col} ${start}px`, `${col} ${end}px`, `transparent ${end}px`, `transparent ${end + barGap}px`);
-          }
-          htmlBgStyle = `style="width:${Math.min(6, htmlDepth) * totalStep}px; background:repeating-linear-gradient(to right, ${stops.join(', ')});"`;
-        }
-
-        html += `<div id="code-line-${lineNum}" class="code-line ${isCulprit ? 'culprit-highlight' : ''}">`;
-        html += `<div class="line-num">${lineNum}</div>`;
-        html += `<div class="track-container">`;
-        html += `<div class="depth-indicator track-html" ${htmlBgStyle} title="HTMLタグ階層: ${htmlDepth}" style="${showHtmlTrack ? '' : 'display:none;'}"></div>`;
-        html += `<div class="depth-indicator track-js" ${jsBgStyle} title="JS波かっこ階層: ${jsDepth}" style="${showJsTrack ? '' : 'display:none;'}"></div>`;
-        html += `</div>`;
-        html += `<div class="line-content">`;
-
-        const lineTags = tagTokens.filter(t => t.startLine === lineNum && t.endLine === lineNum);
-
-        for (let cIdx = 0; cIdx < lineText.length; cIdx++) {
-          const ch = lineText[cIdx];
-          const colNum = cIdx + 1;
-          const key = `${lineNum}:${colNum}`;
-
-          const activeTag = lineTags.find(t => colNum >= t.startCol && colNum <= t.endCol);
-
-          if (openMap[key]) {
-            const p = openMap[key];
-            const col = getColorForDepth(p.depth);
-            html += `<span class="bracket-pair" style="color:${col}; border-color:${col};">${escapeHtml(ch)}</span>`;
-          } else if (closeMap[key]) {
-            const p = closeMap[key];
-            const col = getColorForDepth(p.depth);
-            html += `<span class="bracket-pair" style="color:${col}; border-color:${col};">${escapeHtml(ch)}</span>`;
-          } else if (activeTag) {
-            const tagColor = getColorForDepth(activeTag.depth);
-            const scopeAttr = activeTag.scopeId ? `data-scope-id="${activeTag.scopeId}" onclick="highlightScope(${activeTag.scopeId})"` : '';
-            html += `<span class="tag-clickable" style="color:${tagColor};" ${scopeAttr}>${escapeHtml(ch)}</span>`;
-          } else {
-            html += escapeHtml(ch);
-          }
-        }
-        html += `</div></div>`;
-      });
-
-      viewer.innerHTML = html;
-      window.currentHtmlScopes = htmlScopes;
-    }
-
-    window.highlightScope = function(scopeId) {
-      if (!window.currentHtmlScopes) return;
-      const scope = window.currentHtmlScopes.find(s => s.id === scopeId);
-      if (!scope) return;
-
-      document.querySelectorAll('.code-line.scope-active').forEach(el => el.classList.remove('scope-active'));
-
-      for (let l = scope.startLine; l <= scope.endLine; l++) {
-        const lineEl = document.getElementById(`code-line-${l}`);
-        if (lineEl) lineEl.classList.add('scope-active');
+        let html = '';
+        culprits.forEach((c, idx) => {
+          html += `
+            <div class="culprit-card">
+              <div style="font-size:1rem; font-weight:bold; color:#fca5a5;">🚨 真犯人 第${idx + 1}位: ${c.title}</div>
+              <div style="margin: 8px 0; font-size:0.9rem;">${c.desc}</div>
+              <button style="width:auto; padding:4px 12px; margin:4px 0 0; font-size:0.8rem; background:#dc2626;" onclick="jumpToLine(${c.culpritLine})">
+                👉 ${c.culpritLine} 行目へジャンプして確認
+              </button>
+            </div>
+          `;
+        });
+        list.innerHTML = html;
       }
 
-      showNotice(`🏷️ <${scope.tagName}> の範囲：${scope.startLine} 行目 〜 ${scope.endLine} 行目をハイライト中`);
-    };
+      function renderVisualViewer(rawLines, pairedList, tagTokens, htmlScopes, lineInfos, culprits) {
+        const panel = document.getElementById('viewerPanel');
+        const viewer = document.getElementById('codeViewer');
+        panel.style.display = 'block';
 
-    window.jumpToLine = function(lineNum) {
-      const el = document.getElementById(`code-line-${lineNum}`);
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        el.style.backgroundColor = '#b91c1c';
-        setTimeout(() => { el.style.backgroundColor = ''; }, 1500);
+        const openMap = {};
+        const closeMap = {};
+        pairedList.forEach(p => {
+          openMap[`${p.openLine}:${p.openCol}`] = p;
+          closeMap[`${p.closeLine}:${p.closeCol}`] = p;
+        });
+
+        const culpritLines = culprits.map(c => c.culpritLine);
+        const barWidth = 5;
+        const barGap = 2;
+        const totalStep = barWidth + barGap;
+
+        const lineHtmlDepths = new Array(rawLines.length + 1).fill(0);
+        htmlScopes.forEach(s => {
+          for (let l = s.startLine; l <= s.endLine; l++) {
+            lineHtmlDepths[l] = Math.max(lineHtmlDepths[l], s.depth);
+          }
+        });
+
+        let html = '';
+        rawLines.forEach((lineText, lIdx) => {
+          const lineNum = lIdx + 1;
+          const info = lineInfos[lIdx] || { depthBefore: 0, depthAfter: 0 };
+          const isCulprit = culpritLines.includes(lineNum);
+          
+          const jsDepth = Math.max(0, Math.max(info.depthBefore, info.depthAfter));
+          let jsBgStyle = 'style="width:0px;"';
+          if (jsDepth > 0) {
+            const stops = [];
+            for (let d = 1; d <= jsDepth; d++) {
+              const col = getColorForDepth(d);
+              const start = (d - 1) * totalStep;
+              const end = start + barWidth;
+              stops.push(`${col} ${start}px`, `${col} ${end}px`, `transparent ${end}px`, `transparent ${end + barGap}px`);
+            }
+            jsBgStyle = `style="width:${jsDepth * totalStep}px; background:repeating-linear-gradient(to right, ${stops.join(', ')});"`;
+          }
+
+          const htmlDepth = lineHtmlDepths[lineNum] || 0;
+          let htmlBgStyle = 'style="width:0px;"';
+          if (htmlDepth > 0) {
+            const stops = [];
+            for (let d = 1; d <= Math.min(6, htmlDepth); d++) {
+              const col = getColorForDepth(d);
+              const start = (d - 1) * totalStep;
+              const end = start + barWidth;
+              stops.push(`${col} ${start}px`, `${col} ${end}px`, `transparent ${end}px`, `transparent ${end + barGap}px`);
+            }
+            htmlBgStyle = `style="width:${Math.min(6, htmlDepth) * totalStep}px; background:repeating-linear-gradient(to right, ${stops.join(', ')});"`;
+          }
+
+          html += `<div id="code-line-${lineNum}" class="code-line ${isCulprit ? 'culprit-highlight' : ''}">`;
+          html += `<div class="line-num">${lineNum}</div>`;
+          html += `<div class="track-container">`;
+          html += `<div class="depth-indicator track-html" ${htmlBgStyle} title="HTMLタグ階層: ${htmlDepth}" style="${showHtmlTrack ? '' : 'display:none;'}"></div>`;
+          html += `<div class="depth-indicator track-js" ${jsBgStyle} title="JS波かっこ階層: ${jsDepth}" style="${showJsTrack ? '' : 'display:none;'}"></div>`;
+          html += `</div>`;
+          html += `<div class="line-content">`;
+
+          const lineTags = tagTokens.filter(t => t.startLine === lineNum && t.endLine === lineNum);
+
+          for (let cIdx = 0; cIdx < lineText.length; cIdx++) {
+            const ch = lineText[cIdx];
+            const colNum = cIdx + 1;
+            const key = `${lineNum}:${colNum}`;
+
+            const activeTag = lineTags.find(t => colNum >= t.startCol && colNum <= t.endCol);
+
+            if (openMap[key]) {
+              const p = openMap[key];
+              const col = getColorForDepth(p.depth);
+              html += `<span class="bracket-pair" style="color:${col}; border-color:${col};">${escapeHtml(ch)}</span>`;
+            } else if (closeMap[key]) {
+              const p = closeMap[key];
+              const col = getColorForDepth(p.depth);
+              html += `<span class="bracket-pair" style="color:${col}; border-color:${col};">${escapeHtml(ch)}</span>`;
+            } else if (activeTag) {
+              const tagColor = getColorForDepth(activeTag.depth);
+              const scopeAttr = activeTag.scopeId ? `data-scope-id="${activeTag.scopeId}" onclick="highlightScope(${activeTag.scopeId})"` : '';
+              html += `<span class="tag-clickable" style="color:${tagColor};" ${scopeAttr}>${escapeHtml(ch)}</span>`;
+            } else {
+              html += escapeHtml(ch);
+            }
+          }
+          html += `</div></div>`;
+        });
+
+        viewer.innerHTML = html;
+        window.currentHtmlScopes = htmlScopes;
       }
-    };
 
-    function copyText() {
-      const text = document.getElementById('inputText').value;
-      navigator.clipboard.writeText(text).then(() => {
-        showNotice('📋 クリップボードにコピーしたよ！');
-      });
-    }
+      window.highlightScope = function(scopeId) {
+        if (!window.currentHtmlScopes) return;
+        const scope = window.currentHtmlScopes.find(s => s.id === scopeId);
+        if (!scope) return;
 
-    function showNotice(msg) {
-      const notice = document.getElementById('statusNotice');
-      notice.textContent = msg;
-      setTimeout(() => { notice.textContent = ''; }, 4000);
-    }
+        document.querySelectorAll('.code-line.scope-active').forEach(el => el.classList.remove('scope-active'));
 
-    function escapeHtml(str) {
-      return str.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
-    }
-  </script>
-</body>
+        for (let l = scope.startLine; l <= scope.endLine; l++) {
+          const lineEl = document.getElementById(`code-line-${l}`);
+          if (lineEl) lineEl.classList.add('scope-active');
+        }
+
+        showNotice(`🏷️ <${scope.tagName}> の範囲：${scope.startLine} 行目 〜 ${scope.endLine} 行目をハイライト中`);
+      };
+
+      window.jumpToLine = function(lineNum) {
+        const el = document.getElementById(`code-line-${lineNum}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.style.backgroundColor = '#b91c1c';
+          setTimeout(() => { el.style.backgroundColor = ''; }, 1500);
+        }
+      };
+
+      function copyText() {
+        const text = document.getElementById('inputText').value;
+        navigator.clipboard.writeText(text).then(() => {
+          showNotice('📋 クリップボードにコピーしたよ！');
+        });
+      }
+
+      function showNotice(msg) {
+        const notice = document.getElementById('statusNotice');
+        notice.textContent = msg;
+        setTimeout(() => { notice.textContent = ''; }, 4000);
+      }
+
+      function escapeHtml(str) {
+        return str.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+      }
+    </script>
+  </body>
 </html>
