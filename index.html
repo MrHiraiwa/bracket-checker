@@ -1,5 +1,5 @@
 <!--
-  Bracket Checker & Indent Formatter (Ultra Fast & Smart IIFE Edition)
+  Bracket Checker & Indent Formatter (Clean Manual Scan Edition)
   Copyright (c) 2026 Masatoshi Hiraiwa
   Released under the MIT license
   https://opensource.org/licenses/mit-license.php
@@ -145,6 +145,16 @@
       font-weight: bold;
       margin-left: 10px;
     }
+    .edit-badge {
+      display: inline-block;
+      background: #f59e0b;
+      color: #0f172a;
+      font-size: 0.75rem;
+      font-weight: bold;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-left: 6px;
+    }
     footer {
       margin-top: 50px;
       padding: 24px 0;
@@ -188,6 +198,7 @@
         <input type="file" id="fileInput" accept=".js,.gs,.txt,.html,.json,.ts" style="display:none;" onchange="handleFileSelect(event)">
       </label>
       <span id="loadedFileName" style="font-size:0.85rem; color:#cbd5e1;">(ファイル未選択)</span>
+      <span id="editStatusBadge" style="display:none;" class="edit-badge">編集中 ✏️</span>
     </div>
 
     <textarea id="inputText" placeholder="AIからコピペしたコードを貼り付けるか、上のボタンからファイルを選択してね！"></textarea>
@@ -230,6 +241,7 @@
 
   <script>
     let currentFileName = 'code.js';
+    let isFileLoaded = false;
 
     const DEPTH_COLORS = [
       '#38bdf8', '#4ade80', '#facc15', '#fb923c',
@@ -241,19 +253,31 @@
       return DEPTH_COLORS[(d - 1) % DEPTH_COLORS.length];
     }
 
+    // テキストエリアの手動編集時にバッジのみ表示（スキャンはボタン押下時のみ）
+    document.getElementById('inputText').addEventListener('input', () => {
+      const editBadge = document.getElementById('editStatusBadge');
+      if (isFileLoaded && editBadge) editBadge.style.display = 'inline-block';
+    });
+
     function handleFileSelect(e) {
       const file = e.target.files[0];
       if (!file) return;
 
       currentFileName = file.name;
+      isFileLoaded = true;
+
       document.getElementById('loadedFileName').textContent = `📄 ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+      const editBadge = document.getElementById('editStatusBadge');
+      if (editBadge) editBadge.style.display = 'none';
 
       const reader = new FileReader();
       reader.onload = function(evt) {
         document.getElementById('inputText').value = evt.target.result;
         showNotice('📁 読み込み完了！');
+        huntCulprit();
       };
       reader.readAsText(file, 'UTF-8');
+      e.target.value = '';
     }
 
     function downloadFormattedFile() {
@@ -278,7 +302,7 @@
 
       const outName = `${base}_${timeStr}${ext}`;
 
-      const blob = new Blob([text], { type: 'text/javascript;charset=utf-8' });
+      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = outName;
@@ -412,9 +436,13 @@
       return chars.join('');
     }
 
+    // 5. 真犯人スキャン処理（手動ボタン押下時のみ動作）
     function huntCulprit() {
       const text = document.getElementById('inputText').value;
-      if (!text.trim()) { alert('コードを入力してね！'); return; }
+      if (!text.trim()) {
+        alert('コードを入力してね！');
+        return;
+      }
 
       const rawLines = text.split('\n');
       const cleanText = maskTokens(text);
@@ -461,7 +489,6 @@
         });
       });
 
-      // 即時関数や外枠ラッパーを自動検出してベースの基準深さを算出
       let baseDepth = 0;
       for (let i = 0; i < Math.min(10, lineInfos.length); i++) {
         if (/^\s*(\(\s*(\(\)\s*=>|function)|<script>)/.test(lineInfos[i].raw)) {
@@ -471,12 +498,11 @@
 
       const culprits = [];
 
+      // A. 関数の飲み込み事故
       for (let k = 1; k < lineInfos.length; k++) {
         const info = lineInfos[k];
-        // 🔒【誤検知防止】内部のローカル変数やアロー関数（const x = () =>）は除外し、純粋なトップレベル関数宣言のみを判定！
         const isTopLevelFunction = /^(async\s+)?function\s+[a-zA-Z0-9_$]+/.test(info.raw);
 
-        // 基底深さ（即時関数内なら1）より深い場所で独立した関数宣言が始まっている場合のみ「飲み込み事故」と判定
         if (isTopLevelFunction && info.depthBefore > baseDepth) {
           const prevFuncLine = lineInfos.slice(0, k).reverse().find(l => /function/.test(l.raw));
           culprits.push({
@@ -489,6 +515,7 @@
         }
       }
 
+      // B. 深さが0を割り込んだ行（余分な }）
       const droppedZero = lineInfos.find(l => l.depthAfter < 0);
       if (droppedZero && culprits.length === 0) {
         culprits.push({
@@ -496,6 +523,18 @@
           culpritLine: droppedZero.lineNum,
           title: `余分な閉じかっこ「 } 」`,
           desc: `<strong>${droppedZero.lineNum} 行目</strong> 付近で深さが0を割り込んでいます。余計な <code>}</code> を1つ削除してください！`
+        });
+      }
+
+      // C. 末尾で波かっこの深さが残っている場合（閉じ忘れ）
+      if (currentDepth > 0 && culprits.length === 0) {
+        const lastUnclosed = stack.length > 0 ? stack[stack.length - 1] : null;
+        const lineToPoint = lastUnclosed ? lastUnclosed.lineNum : rawLines.length;
+        culprits.push({
+          score: 98,
+          culpritLine: lineToPoint,
+          title: `閉じかっこ「 } 」の不足（深さ ${currentDepth} のまま終了）`,
+          desc: `ファイルの末尾まで到達しましたが、波かっこが閉じ切っていません。${lastUnclosed ? `<strong>${lastUnclosed.lineNum} 行目</strong> で開かれたブロックや ` : ''}末尾の即時関数の <code>}</code> が不足しています！`
         });
       }
 
