@@ -1,5 +1,5 @@
 <!--
-  Bracket Checker & Indent Formatter (Clean Manual Scan Edition)
+  Bracket Checker & Indent Formatter (Regex Safe Edition)
   Copyright (c) 2026 Masatoshi Hiraiwa
   Released under the MIT license
   https://opensource.org/licenses/mit-license.php
@@ -229,7 +229,7 @@
     <!-- フッター -->
     <footer>
       <p style="margin: 0 0 12px;">
-        <a href="https://note.com/modern_echium586/n/ne000eff3d5ac" target="_blank" rel="noopener noreferrer" class="note-link">
+        <a href="https://editor.note.com/notes/ne000eff3d5ac/edit/" target="_blank" rel="noopener noreferrer" class="note-link">
           📖 note開発ストーリーを読む ↗
         </a>
       </p>
@@ -253,7 +253,6 @@
       return DEPTH_COLORS[(d - 1) % DEPTH_COLORS.length];
     }
 
-    // テキストエリアの手動編集時にバッジのみ表示（スキャンはボタン押下時のみ）
     document.getElementById('inputText').addEventListener('input', () => {
       const editBadge = document.getElementById('editStatusBadge');
       if (isFileLoaded && editBadge) editBadge.style.display = 'inline-block';
@@ -373,173 +372,223 @@
       }
     }
 
+    // 文字列・コメント・正規表現リテラルを安全にスペース化
     function maskTokens(source) {
       const chars = source.split('');
       const len = chars.length;
-      let i = 0, prev = '';
+      let i = 0;
+      let state = 'CODE';
+      let prevToken = '';
+
       while (i < len) {
-        const c = chars[i], next = chars[i + 1];
-        if (c === '/' && next === '/') {
-          while (i < len && chars[i] !== '\n') { chars[i] = ' '; i++; }
-          continue;
-        }
-        if (c === '/' && next === '*') {
-          chars[i] = ' '; chars[i + 1] = ' '; i += 2;
-          while (i < len && !(chars[i] === '*' && chars[i + 1] === '/')) {
-            if (chars[i] !== '\n') chars[i] = ' ';
-            i++;
+        const c = chars[i];
+        const next = chars[i + 1];
+
+        if (state === 'CODE') {
+          if (c === '/' && next === '/') {
+            chars[i] = ' '; chars[i + 1] = ' ';
+            state = 'LINE_COMMENT';
+            i += 2; continue;
+          } else if (c === '/' && next === '*') {
+            chars[i] = ' '; chars[i + 1] = ' ';
+            state = 'BLOCK_COMMENT';
+            i += 2; continue;
+          } else if (c === "'") {
+            chars[i] = ' ';
+            state = 'S_QUOTE';
+            i++; continue;
+          } else if (c === '"') {
+            chars[i] = ' ';
+            state = 'D_QUOTE';
+            i++; continue;
+          } else if (c === '`') {
+            chars[i] = ' ';
+            state = 'T_QUOTE';
+            i++; continue;
+          } else if (c === '/' && /[=(:,;!&|?{\[\n]/.test(prevToken)) {
+            // 正規表現リテラル判定
+            chars[i] = ' ';
+            state = 'REGEX';
+            i++; continue;
           }
-          if (i < len) { chars[i] = ' '; chars[i + 1] = ' '; i += 2; }
-          continue;
-        }
-        if (c === '"' || c === "'") {
-          const q = c; chars[i] = ' '; i++;
-          while (i < len && chars[i] !== q && chars[i] !== '\n') {
-            if (chars[i] === '\\') { chars[i] = ' '; i++; if (i < len && chars[i] !== '\n') chars[i] = ' '; }
-            else { chars[i] = ' '; }
-            i++;
+          if (!/\s/.test(c)) prevToken = c;
+        } else if (state === 'REGEX') {
+          if (c === '\\') {
+            chars[i] = ' ';
+            if (next && next !== '\n') { chars[i + 1] = ' '; i++; }
+          } else if (c === '/') {
+            chars[i] = ' ';
+            state = 'CODE';
+            prevToken = '/';
+          } else if (c !== '\n') {
+            chars[i] = ' ';
           }
-          if (i < len && chars[i] === q) { chars[i] = ' '; i++; }
-          prev = q; continue;
-        }
-        if (c === '`') {
-          chars[i] = ' '; i++;
-          while (i < len && chars[i] !== '`') {
-            if (chars[i] === '\\') { chars[i] = ' '; i++; if (i < len && chars[i] !== '\n') chars[i] = ' '; }
-            else { if (chars[i] !== '\n') chars[i] = ' '; }
-            i++;
+        } else if (state === 'LINE_COMMENT') {
+          if (c === '\n') {
+            state = 'CODE';
+          } else {
+            chars[i] = ' ';
           }
-          if (i < len && chars[i] === '`') { chars[i] = ' '; i++; }
-          prev = '`'; continue;
-        }
-        if (c === '/' && /[=(:,;!&|?{\[\n]/.test(prev)) {
-          chars[i] = ' '; i++;
-          let inClass = false;
-          while (i < len && (chars[i] !== '/' || inClass) && chars[i] !== '\n') {
-            if (chars[i] === '\\') { chars[i] = ' '; i++; if (i < len && chars[i] !== '\n') chars[i] = ' '; }
-            else {
-              if (chars[i] === '[') inClass = true;
-              else if (chars[i] === ']') inClass = false;
-              chars[i] = ' ';
-            }
-            i++;
+        } else if (state === 'BLOCK_COMMENT') {
+          if (c === '*' && next === '/') {
+            chars[i] = ' '; chars[i + 1] = ' ';
+            state = 'CODE';
+            i += 2; continue;
+          } else if (c !== '\n') {
+            chars[i] = ' ';
           }
-          if (i < len && chars[i] === '/') {
-            chars[i] = ' '; i++;
-            while (i < len && /[a-z]/i.test(chars[i])) { chars[i] = ' '; i++; }
+        } else if (state === 'S_QUOTE') {
+          if (c === '\\') {
+            chars[i] = ' ';
+            if (next && next !== '\n') { chars[i + 1] = ' '; i++; }
+          } else if (c === "'") {
+            chars[i] = ' ';
+            state = 'CODE';
+            prevToken = "'";
+          } else if (c !== '\n') {
+            chars[i] = ' ';
           }
-          prev = '/'; continue;
+        } else if (state === 'D_QUOTE') {
+          if (c === '\\') {
+            chars[i] = ' ';
+            if (next && next !== '\n') { chars[i + 1] = ' '; i++; }
+          } else if (c === '"') {
+            chars[i] = ' ';
+            state = 'CODE';
+            prevToken = '"';
+          } else if (c !== '\n') {
+            chars[i] = ' ';
+          }
+        } else if (state === 'T_QUOTE') {
+          if (c === '\\') {
+            chars[i] = ' ';
+            if (next && next !== '\n') { chars[i + 1] = ' '; i++; }
+          } else if (c === '`') {
+            chars[i] = ' ';
+            state = 'CODE';
+            prevToken = '`';
+          } else if (c !== '\n') {
+            chars[i] = ' ';
+          }
         }
-        if (!/\s/.test(c)) prev = c;
         i++;
       }
       return chars.join('');
     }
 
-    // 5. 真犯人スキャン処理（手動ボタン押下時のみ動作）
     function huntCulprit() {
-      const text = document.getElementById('inputText').value;
-      if (!text.trim()) {
-        alert('コードを入力してね！');
-        return;
-      }
+      try {
+        const text = document.getElementById('inputText').value;
+        if (!text.trim()) {
+          alert('コードを入力してね！');
+          return;
+        }
 
-      const rawLines = text.split('\n');
-      const cleanText = maskTokens(text);
-      const cleanLines = cleanText.split('\n');
+        const rawLines = text.split('\n');
+        const cleanText = maskTokens(text);
+        const cleanLines = cleanText.split('\n');
 
-      const stack = [];
-      const pairedList = [];
-      let pairCounter = 1;
-      const lineInfos = [];
-      let currentDepth = 0;
+        const stack = [];
+        const pairedList = [];
+        let pairCounter = 1;
+        const lineInfos = [];
+        let currentDepth = 0;
+        let lowestDepth = 0;
+        let lowestDepthLine = 0;
 
-      cleanLines.forEach((lText, lIdx) => {
-        const raw = rawLines[lIdx];
-        const lineNum = lIdx + 1;
-        const depthBefore = currentDepth;
+        cleanLines.forEach((lText, lIdx) => {
+          const raw = rawLines[lIdx];
+          const lineNum = lIdx + 1;
+          const depthBefore = currentDepth;
 
-        for (let cIdx = 0; cIdx < lText.length; cIdx++) {
-          const ch = lText[cIdx];
-          if (ch === '{') {
-            currentDepth++;
-            stack.push({ id: pairCounter++, lineNum, colNum: cIdx + 1, depth: currentDepth, preview: raw.trim() });
-          } else if (ch === '}') {
-            currentDepth--;
-            if (stack.length > 0) {
-              const op = stack.pop();
-              pairedList.push({
-                id: op.id,
-                openLine: op.lineNum,
-                openCol: op.colNum,
-                closeLine: lineNum,
-                closeCol: cIdx + 1,
-                depth: op.depth,
-                preview: op.preview
-              });
+          for (let cIdx = 0; cIdx < lText.length; cIdx++) {
+            const ch = lText[cIdx];
+            if (ch === '{') {
+              currentDepth++;
+              stack.push({ id: pairCounter++, lineNum, colNum: cIdx + 1, depth: currentDepth, preview: raw.trim() });
+            } else if (ch === '}') {
+              currentDepth--;
+              if (currentDepth < lowestDepth) {
+                lowestDepth = currentDepth;
+                lowestDepthLine = lineNum;
+              }
+              if (stack.length > 0) {
+                const op = stack.pop();
+                pairedList.push({
+                  id: op.id,
+                  openLine: op.lineNum,
+                  openCol: op.colNum,
+                  closeLine: lineNum,
+                  closeCol: cIdx + 1,
+                  depth: op.depth,
+                  preview: op.preview
+                });
+              }
             }
+          }
+
+          lineInfos.push({
+            lineNum,
+            depthBefore,
+            depthAfter: currentDepth,
+            raw: raw.trim()
+          });
+        });
+
+        const culprits = [];
+
+        // A. 余分な閉じかっこ
+        if (lowestDepth < 0) {
+          culprits.push({
+            score: 99,
+            culpritLine: lowestDepthLine,
+            title: `余分な閉じかっこ「 } 」`,
+            desc: `<strong>${lowestDepthLine} 行目</strong> 付近で閉じかっこが多すぎます。余計な <code>}</code> を1つ削除してください！`
+          });
+        }
+
+        // B. 関数の飲み込み事故
+        let baseDepth = 0;
+        for (let i = 0; i < Math.min(5, lineInfos.length); i++) {
+          if (/^\s*(\(\s*(\(\)\s*=>|function)|<script>)/.test(lineInfos[i].raw)) {
+            baseDepth = Math.max(baseDepth, lineInfos[i].depthAfter);
           }
         }
 
-        lineInfos.push({
-          lineNum,
-          depthBefore,
-          depthAfter: currentDepth,
-          raw: raw.trim()
-        });
-      });
+        for (let k = 1; k < lineInfos.length; k++) {
+          const info = lineInfos[k];
+          const isTopLevelFunction = /^(async\s+)?function\s+[a-zA-Z0-9_$]+/.test(info.raw);
 
-      let baseDepth = 0;
-      for (let i = 0; i < Math.min(10, lineInfos.length); i++) {
-        if (/^\s*(\(\s*(\(\)\s*=>|function)|<script>)/.test(lineInfos[i].raw)) {
-          baseDepth = Math.max(baseDepth, lineInfos[i].depthAfter);
+          if (isTopLevelFunction && info.depthBefore > baseDepth) {
+            const prevFuncLine = lineInfos.slice(0, k).reverse().find(l => /function/.test(l.raw));
+            culprits.push({
+              score: 98,
+              culpritLine: prevFuncLine ? prevFuncLine.lineNum : info.lineNum - 1,
+              title: `関数の飲み込み事故（直前の関数が閉じられていません！）`,
+              desc: `<strong>${info.lineNum} 行目</strong> の関数が前の関数の中に飲み込まれています。直前の関数（${prevFuncLine ? prevFuncLine.lineNum + '行目付近' : ''}）の末尾に <code>}</code> が不足しています！`
+            });
+            break;
+          }
         }
-      }
 
-      const culprits = [];
-
-      // A. 関数の飲み込み事故
-      for (let k = 1; k < lineInfos.length; k++) {
-        const info = lineInfos[k];
-        const isTopLevelFunction = /^(async\s+)?function\s+[a-zA-Z0-9_$]+/.test(info.raw);
-
-        if (isTopLevelFunction && info.depthBefore > baseDepth) {
-          const prevFuncLine = lineInfos.slice(0, k).reverse().find(l => /function/.test(l.raw));
+        // C. 未閉じかっこの不足
+        if (currentDepth > 0 && culprits.length === 0) {
+          const lastUnclosed = stack.length > 0 ? stack[stack.length - 1] : null;
           culprits.push({
-            score: 99,
-            culpritLine: prevFuncLine ? prevFuncLine.lineNum : info.lineNum - 1,
-            title: `関数の飲み込み事故（直前の関数が閉じられていません！）`,
-            desc: `<strong>${info.lineNum} 行目</strong> の関数が前の関数の中に飲み込まれています。直前の関数（${prevFuncLine ? prevFuncLine.lineNum + '行目付近' : ''}）の末尾に <code>}</code> が不足しています！`
+            score: 95,
+            culpritLine: lastUnclosed ? lastUnclosed.lineNum : rawLines.length,
+            title: `閉じかっこ「 } 」の不足（${currentDepth} 個不足）`,
+            desc: `ファイルの末尾まで到達しましたが、波かっこが閉じ切っていません（深さ: ${currentDepth}）。${lastUnclosed ? `<strong>${lastUnclosed.lineNum} 行目</strong> 付近で開かれたブロックの ` : ''}<code>}</code> が不足しています！`
           });
-          break;
         }
-      }
 
-      // B. 深さが0を割り込んだ行（余分な }）
-      const droppedZero = lineInfos.find(l => l.depthAfter < 0);
-      if (droppedZero && culprits.length === 0) {
-        culprits.push({
-          score: 95,
-          culpritLine: droppedZero.lineNum,
-          title: `余分な閉じかっこ「 } 」`,
-          desc: `<strong>${droppedZero.lineNum} 行目</strong> 付近で深さが0を割り込んでいます。余計な <code>}</code> を1つ削除してください！`
-        });
+        renderCulprits(culprits);
+        renderVisualViewer(rawLines, pairedList, lineInfos, culprits);
+        showNotice('🔍 スキャン完了！');
+      } catch (err) {
+        console.error("Scan Error:", err);
+        alert(`スキャン中にエラーが発生しました: ${err.message}`);
       }
-
-      // C. 末尾で波かっこの深さが残っている場合（閉じ忘れ）
-      if (currentDepth > 0 && culprits.length === 0) {
-        const lastUnclosed = stack.length > 0 ? stack[stack.length - 1] : null;
-        const lineToPoint = lastUnclosed ? lastUnclosed.lineNum : rawLines.length;
-        culprits.push({
-          score: 98,
-          culpritLine: lineToPoint,
-          title: `閉じかっこ「 } 」の不足（深さ ${currentDepth} のまま終了）`,
-          desc: `ファイルの末尾まで到達しましたが、波かっこが閉じ切っていません。${lastUnclosed ? `<strong>${lastUnclosed.lineNum} 行目</strong> で開かれたブロックや ` : ''}末尾の即時関数の <code>}</code> が不足しています！`
-        });
-      }
-
-      renderCulprits(culprits);
-      renderVisualViewer(rawLines, pairedList, lineInfos, culprits);
     }
 
     function renderCulprits(culprits) {
